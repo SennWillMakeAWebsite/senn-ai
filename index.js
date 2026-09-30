@@ -19,9 +19,10 @@ const API = {
 };
 
 const STORAGE = {
-  history: "senn_ai_history",
-  theme: "senn_ai_theme"
+  history: "senn_ai_history"
 };
+
+const MAX_HISTORY = 30;
 
 
 /*
@@ -33,8 +34,8 @@ const STORAGE = {
 const state = {
   conversation: [],
   history: [],
-  sending: false,
   currentChatId: null,
+  sending: false,
   serverOnline: false
 };
 
@@ -84,7 +85,7 @@ const mobileMenu =
 
 /*
 |--------------------------------------------------------------------------
-| INITIALIZATION
+| INIT
 |--------------------------------------------------------------------------
 */
 
@@ -104,7 +105,9 @@ function init() {
 
   autoResize();
 
-  input?.focus();
+  if (input) {
+    input.focus();
+  }
 
 }
 
@@ -118,9 +121,7 @@ function init() {
 function bindEvents() {
 
   /*
-  |--------------------------------------------------------------------------
-  | SEND FORM
-  |--------------------------------------------------------------------------
+  | FORM
   */
 
   composer?.addEventListener(
@@ -136,9 +137,7 @@ function bindEvents() {
 
 
   /*
-  |--------------------------------------------------------------------------
   | ENTER
-  |--------------------------------------------------------------------------
   */
 
   input?.addEventListener(
@@ -161,9 +160,7 @@ function bindEvents() {
 
 
   /*
-  |--------------------------------------------------------------------------
-  | INPUT
-  |--------------------------------------------------------------------------
+  | RESIZE
   */
 
   input?.addEventListener(
@@ -173,9 +170,7 @@ function bindEvents() {
 
 
   /*
-  |--------------------------------------------------------------------------
   | NEW CHAT
-  |--------------------------------------------------------------------------
   */
 
   newChat?.addEventListener(
@@ -185,9 +180,7 @@ function bindEvents() {
 
 
   /*
-  |--------------------------------------------------------------------------
   | MOBILE MENU
-  |--------------------------------------------------------------------------
   */
 
   mobileMenu?.addEventListener(
@@ -205,9 +198,7 @@ function bindEvents() {
 
 
   /*
-  |--------------------------------------------------------------------------
   | SUGGESTIONS
-  |--------------------------------------------------------------------------
   */
 
   document
@@ -221,9 +212,16 @@ function bindEvents() {
           const message =
             button.dataset.message;
 
-          if (!message) return;
+          if (!message) {
+            return;
+          }
 
-          input.value = message;
+          if (!input) {
+            return;
+          }
+
+          input.value =
+            message;
 
           autoResize();
 
@@ -236,9 +234,7 @@ function bindEvents() {
 
 
   /*
-  |--------------------------------------------------------------------------
   | CLOSE MOBILE SIDEBAR
-  |--------------------------------------------------------------------------
   */
 
   chat?.addEventListener(
@@ -260,9 +256,7 @@ function bindEvents() {
 
 
   /*
-  |--------------------------------------------------------------------------
-  | ESCAPE
-  |--------------------------------------------------------------------------
+  | ESC
   */
 
   document.addEventListener(
@@ -293,17 +287,24 @@ function bindEvents() {
 
 async function sendMessage() {
 
-  if (state.sending) {
+  if (
+    state.sending
+  ) {
     return;
   }
 
+  if (!input) {
+    return;
+  }
+
+
   const message =
-    input?.value.trim();
+    input.value.trim();
 
 
   if (!message) {
 
-    input?.focus();
+    input.focus();
 
     return;
 
@@ -311,12 +312,12 @@ async function sendMessage() {
 
 
   /*
-  |--------------------------------------------------------------------------
-  | CREATE CHAT ID
-  |--------------------------------------------------------------------------
+  | CHAT ID
   */
 
-  if (!state.currentChatId) {
+  if (
+    !state.currentChatId
+  ) {
 
     state.currentChatId =
       createId();
@@ -325,22 +326,21 @@ async function sendMessage() {
 
 
   /*
-  |--------------------------------------------------------------------------
   | STATE
-  |--------------------------------------------------------------------------
   */
 
-  state.sending = true;
+  state.sending =
+    true;
 
-  setSendingState(true);
+  setSendingState(
+    true
+  );
 
   hideWelcome();
 
 
   /*
-  |--------------------------------------------------------------------------
   | USER MESSAGE
-  |--------------------------------------------------------------------------
   */
 
   addMessage(
@@ -350,35 +350,45 @@ async function sendMessage() {
 
 
   /*
-  |--------------------------------------------------------------------------
   | CONVERSATION
-  |--------------------------------------------------------------------------
+  |
+  | Kirim message asli.
+  | Jangan dinormalisasi di frontend.
+  |
+  | Jadi:
+  | y
+  | ok
+  | gmn
+  | gmw
+  | next
+  | dll
+  |
+  | tetap sampai ke Senn AI.
   */
 
   state.conversation.push({
 
-    role: "user",
+    role:
+      "user",
 
-    content: message
+    content:
+      message
 
   });
 
 
   /*
-  |--------------------------------------------------------------------------
-  | INPUT CLEAR
-  |--------------------------------------------------------------------------
+  | CLEAR
   */
 
-  input.value = "";
+  input.value =
+    "";
 
   autoResize();
 
 
   /*
-  |--------------------------------------------------------------------------
   | TYPING
-  |--------------------------------------------------------------------------
   */
 
   const typing =
@@ -389,7 +399,7 @@ async function sendMessage() {
 
     /*
     |--------------------------------------------------------------------------
-    | API
+    | REQUEST
     |--------------------------------------------------------------------------
     */
 
@@ -398,17 +408,24 @@ async function sendMessage() {
         API.chat,
         {
 
-          method: "POST",
+          method:
+            "POST",
 
           headers: {
+
             "Content-Type":
+              "application/json",
+
+            "Accept":
               "application/json"
+
           },
 
           body:
             JSON.stringify({
 
-              message,
+              message:
+                message,
 
               conversation:
                 state.conversation
@@ -425,18 +442,23 @@ async function sendMessage() {
     |--------------------------------------------------------------------------
     */
 
-    if (!response.ok) {
+    if (
+      !response.ok
+    ) {
 
       let errorMessage =
-        "Senn AI mengalami masalah.";
+        `Server error (${response.status})`;
+
 
       try {
 
         const errorData =
           await response.json();
 
+
         if (
-          errorData?.error
+          typeof errorData?.error ===
+          "string"
         ) {
 
           errorMessage =
@@ -450,6 +472,7 @@ async function sendMessage() {
 
       }
 
+
       throw new Error(
         errorMessage
       );
@@ -459,7 +482,7 @@ async function sendMessage() {
 
     /*
     |--------------------------------------------------------------------------
-    | RESPONSE
+    | JSON
     |--------------------------------------------------------------------------
     */
 
@@ -479,7 +502,9 @@ async function sendMessage() {
     */
 
     const answer =
-      extractAnswer(data);
+      extractAnswer(
+        data
+      );
 
 
     addMessage(
@@ -491,22 +516,24 @@ async function sendMessage() {
 
     /*
     |--------------------------------------------------------------------------
-    | SAVE AI MESSAGE
+    | SAVE ASSISTANT
     |--------------------------------------------------------------------------
     */
 
     state.conversation.push({
 
-      role: "assistant",
+      role:
+        "assistant",
 
-      content: answer
+      content:
+        answer
 
     });
 
 
     /*
     |--------------------------------------------------------------------------
-    | SAVE HISTORY
+    | SAVE CHAT
     |--------------------------------------------------------------------------
     */
 
@@ -518,7 +545,7 @@ async function sendMessage() {
   } catch (error) {
 
     console.error(
-      "[SENN AI ERROR]",
+      "[SENN AI]",
       error
     );
 
@@ -528,24 +555,26 @@ async function sendMessage() {
     );
 
 
-    const message =
-      error?.message ||
-      "Server tidak dapat dihubungi.";
-
-
     addMessage(
       "assistant",
-      `Maaf, Senn mengalami kendala.\n\n${message}`
+      `Maaf, Senn mengalami kendala.
+
+${error?.message || "Server tidak dapat dihubungi."}`
     );
 
 
   } finally {
 
-    state.sending = false;
+    state.sending =
+      false;
 
-    setSendingState(false);
+    setSendingState(
+      false
+    );
 
-    input?.focus();
+    if (input) {
+      input.focus();
+    }
 
   }
 
@@ -558,40 +587,1018 @@ async function sendMessage() {
 |--------------------------------------------------------------------------
 */
 
-function extractAnswer(data) {
+function extractAnswer(
+  data
+) {
 
-  if (
-    typeof data?.answer === "string"
+  const possibleAnswers = [
+
+    data?.answer,
+
+    data?.text,
+
+    data?.message,
+
+    data?.result?.text,
+
+    data?.data?.text,
+
+    data?.response,
+
+    data?.output_text
+
+  ];
+
+
+  for (
+    const answer
+    of possibleAnswers
   ) {
 
-    return data.answer;
+    if (
+      typeof answer ===
+        "string" &&
+      answer.trim()
+    ) {
+
+      return answer;
+
+    }
 
   }
 
 
+  return (
+    "Senn tidak menerima jawaban dari server."
+  );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ADD MESSAGE
+|--------------------------------------------------------------------------
+*/
+
+function addMessage(
+  role,
+  content,
+  metadata = null
+) {
+
+  if (!chatInner) {
+    return null;
+  }
+
+
+  const message =
+    document.createElement(
+      "div"
+    );
+
+  message.className =
+    `message ${role}`;
+
+
+  /*
+  | AVATAR
+  */
+
+  const avatar =
+    document.createElement(
+      "div"
+    );
+
+  avatar.className =
+    "avatar";
+
+  avatar.textContent =
+    role === "user"
+      ? "U"
+      : "S";
+
+
+  /*
+  | CONTENT
+  */
+
+  const contentWrapper =
+    document.createElement(
+      "div"
+    );
+
+  contentWrapper.className =
+    "message-content";
+
+
+  /*
+  | BUBBLE
+  */
+
+  const bubble =
+    document.createElement(
+      "div"
+    );
+
+  bubble.className =
+    "bubble";
+
+  bubble.innerHTML =
+    formatMessage(
+      content
+    );
+
+
+  /*
+  | APPEND
+  */
+
+  contentWrapper.appendChild(
+    bubble
+  );
+
+  message.appendChild(
+    avatar
+  );
+
+  message.appendChild(
+    contentWrapper
+  );
+
+  chatInner.appendChild(
+    message
+  );
+
+
+  /*
+  | SOURCES
+  */
+
   if (
-    typeof data?.text === "string"
+    role === "assistant" &&
+    metadata
   ) {
 
-    return data.text;
+    const sources =
+      getSources(
+        metadata
+      );
+
+
+    if (
+      sources.length
+    ) {
+
+      appendSources(
+        contentWrapper,
+        sources
+      );
+
+    }
 
   }
 
 
+  scrollToBottom();
+
+  return message;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| FORMAT MESSAGE
+|--------------------------------------------------------------------------
+*/
+
+function formatMessage(
+  text
+) {
+
   if (
-    typeof data?.message === "string"
+    typeof text !==
+    "string"
   ) {
 
-    return data.message;
+    return "";
 
   }
 
 
-  if (
-    typeof data?.result?.text === "string"
+  let result =
+    escapeHTML(
+      text
+    );
+
+
+  /*
+  | CODE BLOCK
+  */
+
+  result =
+    result.replace(
+      /```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g,
+      (_, language, code) => {
+
+        const label =
+          language
+            ? `<span class="code-language">${language}</span>`
+            : "";
+
+        return `
+          <div class="code-wrapper">
+            ${label}
+            <pre><code>${code}</code></pre>
+          </div>
+        `;
+
+      }
+    );
+
+
+  /*
+  | INLINE CODE
+  */
+
+  result =
+    result.replace(
+      /`([^`\n]+)`/g,
+      "<code>$1</code>"
+    );
+
+
+  /*
+  | BOLD
+  */
+
+  result =
+    result.replace(
+      /\*\*(.*?)\*\*/g,
+      "<strong>$1</strong>"
+    );
+
+
+  /*
+  | ITALIC
+  */
+
+  result =
+    result.replace(
+      /(?<!\*)\*([^*\n]+)\*(?!\*)/g,
+      "<em>$1</em>"
+    );
+
+
+  /*
+  | HEADINGS
+  */
+
+  result =
+    result.replace(
+      /^### (.+)$/gm,
+      "<h4>$1</h4>"
+    );
+
+  result =
+    result.replace(
+      /^## (.+)$/gm,
+      "<h3>$1</h3>"
+    );
+
+  result =
+    result.replace(
+      /^# (.+)$/gm,
+      "<h2>$1</h2>"
+    );
+
+
+  /*
+  | CHECKBOX
+  */
+
+  result =
+    result.replace(
+      /^- \[ \] (.+)$/gm,
+      "☐ $1"
+    );
+
+  result =
+    result.replace(
+      /^- \[x\] (.+)$/gim,
+      "☑ $1"
+    );
+
+
+  /*
+  | BULLETS
+  */
+
+  result =
+    result.replace(
+      /^[•*-] (.+)$/gm,
+      "• $1"
+    );
+
+
+  /*
+  | ORDERED LIST
+  */
+
+  result =
+    result.replace(
+      /^(\d+)\. (.+)$/gm,
+      "$1. $2"
+    );
+
+
+  /*
+  | LINKS
+  */
+
+  result =
+    result.replace(
+      /(https?:\/\/[^\s<]+)/g,
+      url => {
+
+        const cleanUrl =
+          url.replace(
+            /[),.!?]+$/,
+            ""
+          );
+
+        return `
+          <a
+            href="${cleanUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >${cleanUrl}</a>
+        `;
+
+      }
+    );
+
+
+  /*
+  | NEWLINES
+  */
+
+  result =
+    result.replace(
+      /\n/g,
+      "<br>"
+    );
+
+
+  /*
+  | RESTORE CODE BLOCK
+  */
+
+  result =
+    result.replace(
+      /<pre><code>([\s\S]*?)<\/code><\/pre>/g,
+      (_, code) => {
+
+        return (
+          `<pre><code>${code
+            .replace(
+              /<br>/g,
+              "\n"
+            )}</code></pre>`
+        );
+
+      }
+    );
+
+
+  return result;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ESCAPE HTML
+|--------------------------------------------------------------------------
+*/
+
+function escapeHTML(
+  text
+) {
+
+  const div =
+    document.createElement(
+      "div"
+    );
+
+  div.textContent =
+    text;
+
+  return div.innerHTML;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| TYPING
+|--------------------------------------------------------------------------
+*/
+
+function addTyping() {
+
+  if (!chatInner) {
+    return null;
+  }
+
+
+  const message =
+    document.createElement(
+      "div"
+    );
+
+  message.className =
+    "message assistant";
+
+
+  const avatar =
+    document.createElement(
+      "div"
+    );
+
+  avatar.className =
+    "avatar";
+
+  avatar.textContent =
+    "S";
+
+
+  const content =
+    document.createElement(
+      "div"
+    );
+
+  content.className =
+    "message-content";
+
+
+  const bubble =
+    document.createElement(
+      "div"
+    );
+
+  bubble.className =
+    "bubble";
+
+
+  const typing =
+    document.createElement(
+      "div"
+    );
+
+  typing.className =
+    "typing";
+
+
+  for (
+    let i = 0;
+    i < 3;
+    i++
   ) {
 
-    return data.result.text;
+    const dot =
+      document.createElement(
+        "span"
+      );
+
+    typing.appendChild(
+      dot
+    );
+
+  }
+
+
+  bubble.appendChild(
+    typing
+  );
+
+  content.appendChild(
+    bubble
+  );
+
+  message.appendChild(
+    avatar
+  );
+
+  message.appendChild(
+    content
+  );
+
+  chatInner.appendChild(
+    message
+  );
+
+
+  scrollToBottom();
+
+
+  return message;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| REMOVE TYPING
+|--------------------------------------------------------------------------
+*/
+
+function removeTyping(
+  element
+) {
+
+  if (
+    element?.parentNode
+  ) {
+
+    element.parentNode.removeChild(
+      element
+    );
+
+  }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| SOURCES
+|--------------------------------------------------------------------------
+*/
+
+function getSources(
+  metadata
+) {
+
+  const lists = [
+
+    metadata?.sources,
+
+    metadata?.result?.sources,
+
+    metadata?.data?.sources
+
+  ];
+
+
+  for (
+    const list
+    of lists
+  ) {
+
+    if (
+      Array.isArray(list)
+    ) {
+
+      return list;
+
+    }
+
+  }
+
+
+  return [];
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| SOURCES UI
+|--------------------------------------------------------------------------
+*/
+
+function appendSources(
+  parent,
+  sources
+) {
+
+  const validSources =
+    sources
+      .filter(
+        source =>
+          source &&
+          typeof source.url ===
+            "string"
+      )
+      .slice(
+        0,
+        6
+      );
+
+
+  if (
+    !validSources.length
+  ) {
+
+    return;
+
+  }
+
+
+  const container =
+    document.createElement(
+      "div"
+    );
+
+  container.className =
+    "sources";
+
+
+  const title =
+    document.createElement(
+      "div"
+    );
+
+  title.className =
+    "sources-title";
+
+  title.textContent =
+    "Sources";
+
+
+  container.appendChild(
+    title
+  );
+
+
+  validSources.forEach(
+    source => {
+
+      const link =
+        document.createElement(
+          "a"
+        );
+
+      link.className =
+        "source-link";
+
+      link.href =
+        source.url;
+
+      link.target =
+        "_blank";
+
+      link.rel =
+        "noopener noreferrer";
+
+      link.textContent =
+        source.title ||
+        source.url;
+
+
+      container.appendChild(
+        link
+      );
+
+    }
+  );
+
+
+  parent.appendChild(
+    container
+  );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| WELCOME
+|--------------------------------------------------------------------------
+*/
+
+function hideWelcome() {
+
+  if (!welcome) {
+    return;
+  }
+
+  welcome.style.display =
+    "none";
+
+}
+
+
+function showWelcome() {
+
+  if (!welcome) {
+    return;
+  }
+
+  welcome.style.display =
+    "flex";
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| NEW CHAT
+|--------------------------------------------------------------------------
+*/
+
+function createNewChat() {
+
+  state.conversation =
+    [];
+
+  state.currentChatId =
+    createId();
+
+
+  /*
+  | HAPUS MESSAGE
+  */
+
+  if (chatInner) {
+
+    chatInner
+      .querySelectorAll(
+        ".message"
+      )
+      .forEach(
+        message => {
+
+          message.remove();
+
+        }
+      );
+
+  }
+
+
+  /*
+  | WELCOME
+  */
+
+  showWelcome();
+
+
+  /*
+  | INPUT
+  */
+
+  if (input) {
+
+    input.value =
+      "";
+
+    autoResize();
+
+    input.focus();
+
+  }
+
+
+  /*
+  | CLOSE MOBILE SIDEBAR
+  */
+
+  sidebar?.classList.remove(
+    "open"
+  );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| SAVE CURRENT CHAT
+|--------------------------------------------------------------------------
+*/
+
+function saveCurrentChat(
+  firstMessage
+) {
+
+  if (
+    !state.currentChatId
+  ) {
+
+    state.currentChatId =
+      createId();
+
+  }
+
+
+  const title =
+    String(
+      firstMessage || ""
+    )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim()
+      .slice(
+        0,
+        50
+      ) ||
+    "New conversation";
+
+
+  const chatData = {
+
+    id:
+      state.currentChatId,
+
+    title,
+
+    conversation:
+      [...state.conversation],
+
+    updatedAt:
+      Date.now()
+
+  };
+
+
+  const existingIndex =
+    state.history.findIndex(
+      item =>
+        item.id ===
+        state.currentChatId
+    );
+
+
+  if (
+    existingIndex >= 0
+  ) {
+
+    state.history[
+      existingIndex
+    ] =
+      chatData;
+
+  } else {
+
+    state.history.unshift(
+      chatData
+    );
+
+  }
+
+
+  /*
+  | LIMIT
+  */
+
+  state.history =
+    state.history.slice(
+      0,
+      MAX_HISTORY
+    );
+
+
+  saveHistory();
+
+  renderHistory();
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| LOCAL STORAGE
+|--------------------------------------------------------------------------
+*/
+
+function saveHistory() {
+
+  try {
+
+    localStorage.setItem(
+      STORAGE.history,
+      JSON.stringify(
+        state.history
+      )
+    );
+
+  } catch (error) {
+
+    console.warn(
+      "[SENN] History gagal disimpan.",
+      error
+    );
+
+  }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| LOAD HISTORY
+|--------------------------------------------------------------------------
+*/
+
+function loadHistory() {
+
+  try {
+
+    const raw =
+      localStorage.getItem(
+        STORAGE.history
+      );
+
+
+    if (!raw) {
+
+      renderHistory();
+
+      return;
+
+    }
+
+
+    const parsed =
+      JSON.parse(
+        raw
+      );
+
+
+    if (
+      Array.isArray(parsed)
+    ) {
+
+      state.history =
+        parsed
+          .filter(
+            item =>
+              item &&
+              typeof item.id ===
+                "string" &&
+              Array.isArray(
+                item.conversation
+              )
+          )
+          .slice(
+            0,
+            MAX_HISTORY
+          );
+
+    }
+
+  } catch (error) {
+
+    console.warn(
+      "[SENN] History tidak dapat dimuat.",
+      error
+    );
+
+    state.history =
+      [];
+
+  }
+
+
+  renderHistory();
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| RENDER HISTORY
+|--------------------------------------------------------------------------
+*/
+
+function renderHistory() {
+
+  if (!chatHistory) {
+    return;
+  }
+
+
+  chatHistory.innerHTML =
+    "";
+
+
+  if (
+    !state.history.length
+  ) {
+
+    const empty =
+      document.createElement(
+        "div"
+      );
+
+    empty.className =
+      "history-item";
+
+       return data.result.text;
 
   }
 
