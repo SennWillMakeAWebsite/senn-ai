@@ -22,12 +22,30 @@ import {
   isAIConfigured
 } from "./core/ai.js";
 
+import {
+  searchWeb
+} from "./tools/web.js";
+
+
 dotenv.config();
+
+
+/*
+|--------------------------------------------------------------------------
+| SERVER CONFIG
+|--------------------------------------------------------------------------
+*/
 
 const app = express();
 
 const PORT =
   process.env.PORT || 3000;
+
+
+const SENN = {
+  name: "Senn AI",
+  version: "2.0.0"
+};
 
 
 /*
@@ -47,39 +65,298 @@ app.use(
 
 /*
 |--------------------------------------------------------------------------
-| SENN CONFIG
+| TOOL SYSTEM
 |--------------------------------------------------------------------------
+|
+| Semua tool yang tersedia untuk Senn
+| dikontrol dari sini.
+|
 */
 
-const SENN = {
-  name: "Senn AI",
-  version: "2.0.0"
+const TOOLS = {
+
+  web_search: async ({
+    query
+  }) => {
+
+    return await searchWeb({
+      query
+    });
+
+  }
+
 };
 
 
 /*
 |--------------------------------------------------------------------------
-| HEALTH
+| TOOL CHECKER
 |--------------------------------------------------------------------------
 */
 
-app.get("/", (req, res) => {
-  res.json({
-    success: true,
+function hasTool(toolName) {
 
-    name: SENN.name,
+  return Boolean(
+    TOOLS[toolName]
+  );
 
-    version: SENN.version,
+}
 
-    status: "online",
 
-    aiConfigured:
-      isAIConfigured(),
+/*
+|--------------------------------------------------------------------------
+| TOOL EXECUTOR
+|--------------------------------------------------------------------------
+|
+| Executor sekarang langsung berada
+| di server.js.
+|
+*/
 
-    timestamp:
-      new Date().toISOString()
-  });
-});
+async function executeTool(
+  toolName,
+  input = {}
+) {
+
+  if (
+    !hasTool(toolName)
+  ) {
+
+    return {
+
+      success: false,
+
+      tool:
+        toolName,
+
+      error:
+        `Tool "${toolName}" tidak tersedia.`
+
+    };
+
+  }
+
+
+  try {
+
+    const result =
+      await TOOLS[toolName](
+        input
+      );
+
+
+    return {
+
+      success: true,
+
+      tool:
+        toolName,
+
+      result
+
+    };
+
+  } catch (error) {
+
+    console.error(
+      `[SENN TOOL ERROR] ${toolName}`,
+      error
+    );
+
+
+    return {
+
+      success: false,
+
+      tool:
+        toolName,
+
+      error:
+        error.message
+
+    };
+
+  }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| EXECUTE TOOL PLAN
+|--------------------------------------------------------------------------
+*/
+
+async function executeToolPlan({
+
+  execution,
+
+  message
+
+}) {
+
+  if (
+    !execution ||
+    !Array.isArray(
+      execution.tools
+    )
+  ) {
+
+    return {
+
+      success: true,
+
+      executed: [],
+
+      results: []
+
+    };
+
+  }
+
+
+  const results = [];
+
+
+  for (
+    const toolName
+      of execution.tools
+  ) {
+
+    const result =
+      await executeTool(
+
+        toolName,
+
+        {
+          query:
+            message,
+
+          message
+        }
+
+      );
+
+
+    results.push(
+      result
+    );
+
+  }
+
+
+  return {
+
+    success:
+      results.every(
+        (item) =>
+          item.success
+      ),
+
+    executed:
+      results.map(
+        (item) =>
+          item.tool
+      ),
+
+    results
+
+  };
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| FORMAT TOOL RESULTS
+|--------------------------------------------------------------------------
+*/
+
+function formatToolResults(
+  results = []
+) {
+
+  if (
+    !Array.isArray(results) ||
+    results.length === 0
+  ) {
+
+    return "";
+
+  }
+
+
+  return results
+    .map(
+      (item) => {
+
+        if (
+          !item.success
+        ) {
+
+          return [
+            `TOOL: ${item.tool}`,
+            `STATUS: ERROR`,
+            `ERROR: ${item.error}`
+          ].join("\n");
+
+        }
+
+
+        return [
+          `TOOL: ${item.tool}`,
+          `STATUS: SUCCESS`,
+          "RESULT:",
+          JSON.stringify(
+            item.result,
+            null,
+            2
+          )
+        ].join("\n");
+
+      }
+    )
+    .join("\n\n");
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| HOME
+|--------------------------------------------------------------------------
+*/
+
+app.get(
+  "/",
+  (req, res) => {
+
+    res.json({
+
+      success: true,
+
+      name:
+        SENN.name,
+
+      version:
+        SENN.version,
+
+      status:
+        "online",
+
+      aiConfigured:
+        isAIConfigured(),
+
+      availableTools:
+        Object.keys(TOOLS),
+
+      timestamp:
+        new Date().toISOString()
+
+    });
+
+  }
+);
 
 
 /*
@@ -88,37 +365,46 @@ app.get("/", (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.get("/api/status", (req, res) => {
+app.get(
+  "/api/status",
+  (req, res) => {
 
-  res.json({
-    success: true,
+    res.json({
 
-    system: {
-      server: true,
+      success: true,
 
-      ai:
-        isAIConfigured(),
+      system: {
 
-      language: true,
+        server:
+          true,
 
-      context: true,
+        ai:
+          isAIConfigured(),
 
-      router: true,
+        language:
+          true,
 
-      web: false,
+        context:
+          true,
 
-      memory: false,
+        router:
+          true,
 
-      files: false
-    },
+        tools:
+          Object.keys(TOOLS)
 
-    version:
-      SENN.version,
+      },
 
-    timestamp:
-      new Date().toISOString()
-  });
-});
+      version:
+        SENN.version,
+
+      timestamp:
+        new Date().toISOString()
+
+    });
+
+  }
+);
 
 
 /*
@@ -129,16 +415,19 @@ app.get("/api/status", (req, res) => {
 
 app.post(
   "/api/chat",
+
   async (req, res) => {
 
     try {
 
       const {
+
         message,
 
         conversation = [],
 
         settings = {}
+
       } = req.body;
 
 
@@ -154,10 +443,12 @@ app.post(
       ) {
 
         return res.status(400).json({
+
           success: false,
 
           error:
             "Message cannot be empty."
+
         });
 
       }
@@ -169,44 +460,49 @@ app.post(
 
       /*
       ----------------------------------------------------------------------
-      | 1. LANGUAGE ANALYSIS
+      | LANGUAGE ANALYSIS
       ----------------------------------------------------------------------
       */
 
       const language =
         analyzeLanguage({
+
           message:
             cleanMessage,
 
           conversation
+
         });
 
 
       /*
       ----------------------------------------------------------------------
-      | 2. ROUTING
+      | ROUTER
       ----------------------------------------------------------------------
       */
 
       const routing =
         routeRequest({
+
           message:
             language.normalizedMessage,
 
           conversation,
 
           settings
+
         });
 
 
       /*
       ----------------------------------------------------------------------
-      | 3. CONTEXT
+      | CONTEXT
       ----------------------------------------------------------------------
       */
 
       const context =
         buildContextPackage({
+
           conversation,
 
           languageAnalysis:
@@ -214,22 +510,116 @@ app.post(
 
           userMessage:
             cleanMessage
+
         });
 
 
       /*
       ----------------------------------------------------------------------
-      | 4. CREATE AI CONVERSATION
+      | AI CONFIG CHECK
+      ----------------------------------------------------------------------
+      */
+
+      if (
+        !isAIConfigured()
+      ) {
+
+        return res.status(503).json({
+
+          success: false,
+
+          error:
+            "Senn AI belum dikonfigurasi.",
+
+          setup: {
+
+            required:
+              "AI_API_KEY",
+
+            message:
+              "Tambahkan API key terlebih dahulu."
+
+          },
+
+          analysis: {
+
+            language,
+
+            routing,
+
+            context
+
+          }
+
+        });
+
+      }
+
+
+      /*
+      ----------------------------------------------------------------------
+      | TOOL EXECUTION
+      ----------------------------------------------------------------------
+      */
+
+      let toolExecution = {
+
+        success: true,
+
+        executed: [],
+
+        results: []
+
+      };
+
+
+      if (
+        routing.requiresTool
+      ) {
+
+        toolExecution =
+          await executeToolPlan({
+
+            execution:
+              routing.execution,
+
+            message:
+              cleanMessage
+
+          });
+
+      }
+
+
+      /*
+      ----------------------------------------------------------------------
+      | TOOL CONTEXT
+      ----------------------------------------------------------------------
+      */
+
+      const toolContext =
+        formatToolResults(
+
+          toolExecution.results
+
+        );
+
+
+      /*
+      ----------------------------------------------------------------------
+      | ADD USER MESSAGE
       ----------------------------------------------------------------------
       */
 
       const updatedConversation =
         appendUserMessage(
+
           conversation,
 
           cleanMessage,
 
           {
+
             language:
               language.language,
 
@@ -238,45 +628,17 @@ app.post(
 
             tools:
               routing.tools
+
           }
+
         );
 
 
       /*
       ----------------------------------------------------------------------
-      | 5. AI CORE
+      | AI CORE
       ----------------------------------------------------------------------
       */
-
-      if (!isAIConfigured()) {
-
-        return res.status(503).json({
-
-          success: false,
-
-          error:
-            "Senn AI is not configured yet.",
-
-          setup: {
-            required:
-              "AI_API_KEY",
-
-            message:
-              "Configure the API key before using the AI Core."
-          },
-
-          analysis: {
-            language,
-
-            routing,
-
-            context
-          }
-
-        });
-
-      }
-
 
       const ai =
         await generateAIResponse({
@@ -295,13 +657,16 @@ app.post(
 
           settings,
 
-          tools: []
+          tools: [],
+
+          toolContext
+
         });
 
 
       /*
       ----------------------------------------------------------------------
-      | 6. SAVE ASSISTANT MESSAGE
+      | ADD ASSISTANT MESSAGE
       ----------------------------------------------------------------------
       */
 
@@ -313,11 +678,16 @@ app.post(
           ai.text,
 
           {
+
             model:
               ai.model,
 
             toolCalls:
-              ai.toolCalls
+              ai.toolCalls,
+
+            tools:
+              toolExecution.executed
+
           }
 
         );
@@ -325,7 +695,7 @@ app.post(
 
       /*
       ----------------------------------------------------------------------
-      | 7. RESPONSE
+      | FINAL RESPONSE
       ----------------------------------------------------------------------
       */
 
@@ -337,19 +707,24 @@ app.post(
           ai.id,
 
         message: {
+
           role:
             "assistant",
 
           content:
             ai.text
+
         },
+
 
         meta: {
 
           model:
             ai.model,
 
+
           language: {
+
             detected:
               language.language,
 
@@ -364,7 +739,9 @@ app.post(
 
             contextRequired:
               language.contextRequired
+
           },
+
 
           routing: {
 
@@ -375,8 +752,27 @@ app.post(
               routing.tools,
 
             requiresTool:
-              routing.requiresTool
+              routing.requiresTool,
+
+            execution:
+              routing.execution
+
           },
+
+
+          tools: {
+
+            executed:
+              toolExecution.executed,
+
+            success:
+              toolExecution.success,
+
+            results:
+              toolExecution.results
+
+          },
+
 
           context: {
 
@@ -390,15 +786,36 @@ app.post(
               getConversationStats(
                 finalConversation
               )
+
           },
 
-          tools:
-            ai.toolCalls,
 
-          sources: []
+          sources:
+            toolExecution.results
+              .flatMap(
+                (item) => {
+
+                  if (
+                    !item.success ||
+                    !item.result
+                  ) {
+
+                    return [];
+
+                  }
+
+                  return (
+                    item.result.sources ||
+                    []
+                  );
+
+                }
+              )
+
         }
 
       });
+
 
     } catch (error) {
 
@@ -470,6 +887,7 @@ app.use(
       error
     );
 
+
     res.status(500).json({
 
       success: false,
@@ -485,7 +903,7 @@ app.use(
 
 /*
 |--------------------------------------------------------------------------
-| START SERVER
+| START
 |--------------------------------------------------------------------------
 */
 
@@ -521,19 +939,19 @@ app.listen(
     );
 
     console.log(
-      "Core   : READY"
+      "Language : READY"
     );
 
     console.log(
-      "Router : READY"
+      "Context  : READY"
     );
 
     console.log(
-      "Lang   : READY"
+      "Router   : READY"
     );
 
     console.log(
-      "Context: READY"
+      `Tools    : ${Object.keys(TOOLS).join(", ")}`
     );
 
     console.log(
