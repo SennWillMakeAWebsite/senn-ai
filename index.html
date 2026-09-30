@@ -1,666 +1,1209 @@
-/*
-|--------------------------------------------------------------------------
-| SENN AI V2
-| index.js
-|--------------------------------------------------------------------------
-*/
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-"use strict";
+  <title>Senn AI V2</title>
 
+  <meta
+    name="description"
+    content="Senn AI V2 - Intelligent AI assistant"
+  >
 
-/*
-|--------------------------------------------------------------------------
-| CONFIG
-|--------------------------------------------------------------------------
-*/
+  <style>
+    /* =========================================================
+       SENN AI V2
+       COMPLETE UI
+       ========================================================= */
 
-const API = {
-  chat: "/api/chat",
-  status: "/api/status"
-};
-
-
-/*
-|--------------------------------------------------------------------------
-| STATE
-|--------------------------------------------------------------------------
-*/
-
-const state = {
-  conversation: [],
-  history: [],
-  sending: false,
-  currentChatId: null
-};
-
-
-/*
-|--------------------------------------------------------------------------
-| ELEMENTS
-|--------------------------------------------------------------------------
-*/
-
-const chat =
-  document.getElementById("chat");
-
-const chatInner =
-  document.getElementById("chatInner");
-
-const welcome =
-  document.getElementById("welcome");
-
-const input =
-  document.getElementById("messageInput");
-
-const sendButton =
-  document.getElementById("sendButton");
-
-const composer =
-  document.getElementById("composer");
-
-const newChat =
-  document.getElementById("newChat");
-
-const chatHistory =
-  document.getElementById("chatHistory");
-
-const statusText =
-  document.getElementById("statusText");
-
-const statusDot =
-  document.getElementById("statusDot");
-
-const sidebar =
-  document.getElementById("sidebar");
-
-const mobileMenu =
-  document.getElementById("mobileMenu");
-
-
-/*
-|--------------------------------------------------------------------------
-| INITIALIZATION
-|--------------------------------------------------------------------------
-*/
-
-document.addEventListener(
-  "DOMContentLoaded",
-  init
-);
-
-
-function init() {
-
-  loadHistory();
-
-  bindEvents();
-
-  checkServer();
-
-  autoResize();
-
-  input.focus();
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| EVENTS
-|--------------------------------------------------------------------------
-*/
-
-function bindEvents() {
-
-  /*
-  | SEND
-  */
-
-  composer.addEventListener(
-    "submit",
-    event => {
-
-      event.preventDefault();
-
-      sendMessage();
-
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
-  );
 
+    :root {
+      --bg: #070812;
+      --bg-deep: #05060d;
 
-  /*
-  | ENTER
-  */
+      --panel: rgba(15, 17, 30, 0.82);
+      --panel-light: rgba(255, 255, 255, 0.045);
+      --panel-hover: rgba(255, 255, 255, 0.075);
 
-  input.addEventListener(
-    "keydown",
-    event => {
+      --border: rgba(255, 255, 255, 0.08);
+      --border-light: rgba(255, 255, 255, 0.12);
 
-      if (
-        event.key === "Enter" &&
-        !event.shiftKey
-      ) {
+      --text: #f5f6ff;
+      --text-soft: #d9dced;
+      --muted: #8b91a8;
+      --muted-dark: #62687d;
 
-        event.preventDefault();
+      --purple: #7c5cff;
+      --purple-light: #9b87ff;
+      --blue: #3d8bff;
+      --cyan: #56c7ff;
 
-        sendMessage();
+      --success: #4ade80;
+      --danger: #ff5577;
 
-      }
+      --user: #7258ff;
 
+      --sidebar-width: 275px;
+      --content-width: 900px;
     }
-  );
 
-
-  /*
-  | AUTO RESIZE
-  */
-
-  input.addEventListener(
-    "input",
-    autoResize
-  );
-
-
-  /*
-  | NEW CHAT
-  */
-
-  newChat.addEventListener(
-    "click",
-    createNewChat
-  );
-
-
-  /*
-  | MOBILE SIDEBAR
-  */
-
-  mobileMenu.addEventListener(
-    "click",
-    () => {
-
-      sidebar.classList.toggle(
-        "open"
-      );
-
+    html {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
     }
-  );
 
+    body {
+      width: 100%;
+      min-height: 100vh;
 
-  /*
-  | SUGGESTIONS
-  */
+      color: var(--text);
 
-  document
-    .querySelectorAll(
-      ".suggestion"
-    )
-    .forEach(button => {
+      font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
 
-      button.addEventListener(
-        "click",
-        () => {
+      background:
+        radial-gradient(
+          circle at 15% 5%,
+          rgba(124, 92, 255, 0.17),
+          transparent 28%
+        ),
+        radial-gradient(
+          circle at 85% 85%,
+          rgba(61, 139, 255, 0.12),
+          transparent 30%
+        ),
+        radial-gradient(
+          circle at 50% 50%,
+          rgba(124, 92, 255, 0.025),
+          transparent 50%
+        ),
+        var(--bg);
 
-          const message =
-            button.dataset.message;
+      overflow: hidden;
+    }
 
-          if (!message) return;
+    button,
+    textarea,
+    input {
+      font: inherit;
+    }
 
-          input.value =
-            message;
+    button {
+      border: 0;
+      outline: 0;
+      cursor: pointer;
+    }
 
-          autoResize();
+    a {
+      color: inherit;
+    }
 
-          sendMessage();
+    ::selection {
+      background: rgba(124, 92, 255, 0.35);
+      color: white;
+    }
 
-        }
-      );
+    /* =========================================================
+       SCROLLBAR
+       ========================================================= */
 
-    });
+    ::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
 
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
 
-  /*
-  | CLOSE SIDEBAR WHEN CLICKING CHAT
-  */
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.09);
+      border-radius: 99px;
+    }
 
-  chat.addEventListener(
-    "click",
-    () => {
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.16);
+    }
 
-      if (
-        window.innerWidth <= 760
-      ) {
+    /* =========================================================
+       APP
+       ========================================================= */
 
-        sidebar.classList.remove(
-          "open"
+    .app {
+      position: relative;
+
+      display: flex;
+
+      width: 100%;
+      height: 100vh;
+
+      overflow: hidden;
+    }
+
+    /* =========================================================
+       BACKGROUND GLOW
+       ========================================================= */
+
+    .background-glow {
+      position: fixed;
+
+      pointer-events: none;
+
+      width: 500px;
+      height: 500px;
+
+      border-radius: 50%;
+
+      filter: blur(100px);
+
+      opacity: 0.08;
+
+      z-index: 0;
+    }
+
+    .background-glow.one {
+      top: -250px;
+      left: 100px;
+
+      background: var(--purple);
+    }
+
+    .background-glow.two {
+      right: -250px;
+      bottom: -250px;
+
+      background: var(--blue);
+    }
+
+    /* =========================================================
+       SIDEBAR
+       ========================================================= */
+
+    .sidebar {
+      position: relative;
+      z-index: 50;
+
+      width: var(--sidebar-width);
+      height: 100vh;
+
+      flex: 0 0 var(--sidebar-width);
+
+      display: flex;
+      flex-direction: column;
+
+      padding: 18px;
+
+      background:
+        linear-gradient(
+          180deg,
+          rgba(9, 10, 20, 0.95),
+          rgba(7, 8, 17, 0.88)
         );
 
-      }
+      border-right: 1px solid var(--border);
 
-    }
-  );
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
 
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| SEND MESSAGE
-|--------------------------------------------------------------------------
-*/
-
-async function sendMessage() {
-
-  if (state.sending) {
-    return;
-  }
-
-
-  const message =
-    input.value.trim();
-
-
-  if (!message) {
-
-    input.focus();
-
-    return;
-
-  }
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | UI
-  |--------------------------------------------------------------------------
-  */
-
-  state.sending = true;
-
-  setSendingState(true);
-
-  hideWelcome();
-
-  addMessage(
-    "user",
-    message
-  );
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | CONVERSATION
-  |--------------------------------------------------------------------------
-  */
-
-  state.conversation.push({
-
-    role:
-      "user",
-
-    content:
-      message
-
-  });
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | CLEAR INPUT
-  |--------------------------------------------------------------------------
-  */
-
-  input.value = "";
-
-  autoResize();
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | TYPING
-  |--------------------------------------------------------------------------
-  */
-
-  const typing =
-    addTyping();
-
-
-  try {
-
-    /*
-    |--------------------------------------------------------------------------
-    | API REQUEST
-    |--------------------------------------------------------------------------
-    */
-
-    const response =
-      await fetch(
-        API.chat,
-        {
-
-          method:
-            "POST",
-
-          headers: {
-
-            "Content-Type":
-              "application/json"
-
-          },
-
-          body:
-            JSON.stringify({
-
-              message,
-
-              conversation:
-                state.conversation
-
-            })
-
-        }
-      );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | HTTP ERROR
-    |--------------------------------------------------------------------------
-    */
-
-    if (!response.ok) {
-
-      let errorMessage =
-        "Senn AI mengalami masalah.";
-
-      try {
-
-        const errorData =
-          await response.json();
-
-        if (
-          errorData?.error
-        ) {
-
-          errorMessage =
-            errorData.error;
-
-        }
-
-      } catch {
-
-        // Ignore JSON parsing error.
-
-      }
-
-      throw new Error(
-        errorMessage
-      );
-
+      transition:
+        transform 0.28s ease,
+        width 0.28s ease;
     }
 
+    /* =========================================================
+       BRAND
+       ========================================================= */
 
-    /*
-    |--------------------------------------------------------------------------
-    | RESPONSE
-    |--------------------------------------------------------------------------
-    */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
 
-    const data =
-      await response.json();
+      padding: 2px 3px;
 
+      margin-bottom: 24px;
+    }
 
-    removeTyping(
-      typing
-    );
+    .brand-logo {
+      position: relative;
 
+      width: 43px;
+      height: 43px;
 
-    /*
-    |--------------------------------------------------------------------------
-    | AI ANSWER
-    |--------------------------------------------------------------------------
-    */
+      display: grid;
+      place-items: center;
 
-    const answer =
-      extractAnswer(
-        data
-      );
+      flex: 0 0 auto;
 
+      border-radius: 14px;
 
-    addMessage(
-      "assistant",
-      answer,
-      data
-    );
+      color: white;
 
+      font-size: 18px;
+      font-weight: 850;
 
-    /*
-    |--------------------------------------------------------------------------
-    | SAVE CONVERSATION
-    |--------------------------------------------------------------------------
-    */
+      background:
+        linear-gradient(
+          135deg,
+          var(--purple),
+          var(--blue)
+        );
 
-    state.conversation.push({
+      box-shadow:
+        0 0 30px rgba(124, 92, 255, 0.28),
+        inset 0 1px 0 rgba(255,255,255,0.2);
+    }
 
-      role:
-        "assistant",
+    .brand-logo::after {
+      content: "";
 
-      content:
-        answer
+      position: absolute;
 
-    });
+      inset: 1px;
 
+      border-radius: 13px;
 
-    /*
-    |--------------------------------------------------------------------------
-    | HISTORY
-    |--------------------------------------------------------------------------
-    */
+      border: 1px solid rgba(255,255,255,0.12);
 
-    saveCurrentChat(
-      message
-    );
+      pointer-events: none;
+    }
 
+    .brand-name {
+      color: white;
 
-  } catch (error) {
+      font-size: 17px;
+      font-weight: 750;
 
-    console.error(
-      "[SENN ERROR]",
-      error
-    );
+      letter-spacing: -0.3px;
+    }
 
+    .brand-version {
+      margin-top: 2px;
 
-    removeTyping(
-      typing
-    );
+      color: var(--muted);
 
+      font-size: 11px;
+      font-weight: 500;
+    }
 
-    addMessage(
-      "assistant",
-      `Maaf, Senn mengalami kendala.
+    /* =========================================================
+       NEW CHAT
+       ========================================================= */
 
-${error.message || "Server tidak dapat dihubungi."}`
-    );
+    .new-chat {
+      width: 100%;
 
-  } finally {
+      display: flex;
+      align-items: center;
+      gap: 9px;
 
-    state.sending = false;
+      padding: 12px 13px;
 
-    setSendingState(false);
+      border-radius: 12px;
 
-    input.focus();
+      color: var(--text);
 
-  }
+      background:
+        linear-gradient(
+          135deg,
+          rgba(124, 92, 255, 0.13),
+          rgba(61, 139, 255, 0.07)
+        );
 
-}
+      border: 1px solid rgba(124, 92, 255, 0.18);
 
+      text-align: left;
 
-/*
-|--------------------------------------------------------------------------
-| EXTRACT ANSWER
-|--------------------------------------------------------------------------
-*/
+      transition:
+        background 0.2s ease,
+        border 0.2s ease,
+        transform 0.2s ease;
+    }
 
-function extractAnswer(data) {
+    .new-chat:hover {
+      background:
+        linear-gradient(
+          135deg,
+          rgba(124, 92, 255, 0.21),
+          rgba(61, 139, 255, 0.12)
+        );
 
-  if (
-    typeof data?.answer ===
-    "string"
-  ) {
+      border-color:
+        rgba(124, 92, 255, 0.34);
 
-    return data.answer;
+      transform: translateY(-1px);
+    }
 
-  }
+    .new-chat-icon {
+      width: 23px;
+      height: 23px;
 
+      display: grid;
+      place-items: center;
 
-  if (
-    typeof data?.text ===
-    "string"
-  ) {
+      border-radius: 7px;
 
-    return data.text;
+      background: rgba(255,255,255,0.07);
 
-  }
+      font-size: 16px;
+      line-height: 1;
+    }
 
+    .new-chat-text {
+      font-size: 13px;
+      font-weight: 600;
+    }
 
-  if (
-    typeof data?.message ===
-    "string"
-  ) {
+    /* =========================================================
+       SIDEBAR SECTION
+       ========================================================= */
 
-    return data.message;
+    .sidebar-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
 
-  }
+      margin:
+        25px 8px 9px;
 
+      color: var(--muted);
 
-  if (
-    typeof data?.result?.text ===
-    "string"
-  ) {
+      font-size: 10px;
+      font-weight: 700;
 
-    return data.result.text;
+      text-transform: uppercase;
 
-  }
+      letter-spacing: 1.2px;
+    }
 
+    .sidebar-label span:last-child {
+      color: var(--muted-dark);
 
-  return "Senn tidak menerima jawaban dari server.";
+      font-size: 9px;
+    }
 
-}
+    /* =========================================================
+       HISTORY
+       ========================================================= */
 
+    .chat-history {
+      display: flex;
+      flex-direction: column;
 
-/*
-|--------------------------------------------------------------------------
-| ADD MESSAGE
-|--------------------------------------------------------------------------
-*/
+      gap: 4px;
 
-function addMessage(
-  role,
-  content,
-  metadata = null
-) {
+      overflow-y: auto;
 
-  const message =
-    document.createElement(
-      "div"
-    );
+      padding-right: 2px;
+    }
 
+    .history-item {
+      position: relative;
 
-  message.className =
-    `message ${role}`;
+      width: 100%;
 
+      padding:
+        10px 11px;
 
-  /*
-  |--------------------------------------------------------------------------
-  | AVATAR
-  |--------------------------------------------------------------------------
-  */
+      border-radius: 10px;
 
-  const avatar =
-    document.createElement(
-      "div"
-    );
+      color: #aeb3c6;
 
-  avatar.className =
-    "avatar";
+      background: transparent;
 
-  avatar.textContent =
-    role === "user"
-      ? "U"
-      : "S";
+      font-size: 12px;
 
+      line-height: 1.4;
 
-  /*
-  |--------------------------------------------------------------------------
-  | BUBBLE
-  |--------------------------------------------------------------------------
-  */
+      white-space: nowrap;
 
-  const bubble =
-    document.createElement(
-      "div"
-    );
+      overflow: hidden;
 
-  bubble.className =
-    "bubble";
+      text-overflow: ellipsis;
 
+      cursor: pointer;
 
-  /*
-  |--------------------------------------------------------------------------
-  | TEXT
-  |--------------------------------------------------------------------------
-  */
+      transition:
+        background 0.18s ease,
+        color 0.18s ease;
+    }
 
-  bubble.innerHTML =
-    formatMessage(
-      content
-    );
+    .history-item:hover {
+      color: white;
 
+      background:
+        rgba(255,255,255,0.055);
+    }
 
-  /*
-  |--------------------------------------------------------------------------
-  | APPEND
-  |--------------------------------------------------------------------------
-  */
+    .history-item.active {
+      color: white;
 
-  message.appendChild(
-    avatar
-  );
+      background:
+        rgba(124,92,255,0.12);
 
-  message.appendChild(
-    bubble
-  );
+      border:
+        1px solid rgba(124,92,255,0.12);
+    }
 
+    /* =========================================================
+       SIDEBAR BOTTOM
+       ========================================================= */
 
-  chatInner.appendChild(
-    message
-  );
+    .sidebar-bottom {
+      margin-top: auto;
 
+      padding-top: 14px;
 
-  /*
-  |--------------------------------------------------------------------------
-  | SOURCES
-  |--------------------------------------------------------------------------
-  */
+      border-top: 1px solid var(--border);
+    }
 
-  if (
-    role === "assistant" &&
-    metadata
-  ) {
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
 
-    const sources =
-      getSources(
-        metadata
-      );
+      color: var(--muted);
 
+      font-size: 11px;
+    }
 
-    if (
-      sources.length
-    ) {
+    .status-dot {
+      width: 7px;
+      height: 7px;
 
-      appendSources(
-        message,
-        sources
+      flex: 0 0 auto;
+
+      border-radius: 50%;
+
+      background: var(--success);
+
+      box-shadow:
+        0 0 10px rgba(74,222,128,0.65);
+    }
+
+    .status-dot.offline {
+      background: var(--danger);
+
+      box-shadow:
+        0 0 10px rgba(255,85,119,0.5);
+    }
+
+    .status-dot.loading {
+      background: #facc15;
+
+      box-shadow:
+        0 0 10px rgba(250,204,21,0.5);
+    }
+
+    /* =========================================================
+       MAIN
+       ========================================================= */
+
+    .main {
+      position: relative;
+      z-index: 1;
+
+      min-width: 0;
+
+      flex: 1;
+
+      display: flex;
+      flex-direction: column;
+
+      height: 100vh;
+    }
+
+    /* =========================================================
+       TOPBAR
+       ========================================================= */
+
+    .topbar {
+      position: relative;
+      z-index: 10;
+
+      height: 65px;
+
+      flex: 0 0 65px;
+
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
+      padding:
+        0 23px;
+
+      background:
+        rgba(7,8,18,0.52);
+
+      border-bottom:
+        1px solid var(--border);
+
+      backdrop-filter:
+        blur(22px);
+
+      -webkit-backdrop-filter:
+        blur(22px);
+    }
+
+    .top-left {
+      display: flex;
+      align-items: center;
+
+      gap: 11px;
+    }
+
+    .mobile-menu {
+      display: none;
+
+      width: 38px;
+      height: 38px;
+
+      border-radius: 10px;
+
+      color: white;
+
+      background:
+        rgba(255,255,255,0.05);
+
+      border:
+        1px solid var(--border);
+
+      transition: 0.2s;
+    }
+
+    .mobile-menu:hover {
+      background:
+        rgba(255,255,255,0.09);
+    }
+
+    .top-title {
+      color: white;
+
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .top-subtitle {
+      margin-top: 2px;
+
+      color: var(--muted);
+
+      font-size: 10px;
+    }
+
+    .model-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      padding:
+        7px 11px;
+
+      border-radius: 999px;
+
+      color: #c5bbff;
+
+      background:
+        rgba(124,92,255,0.09);
+
+      border:
+        1px solid rgba(124,92,255,0.21);
+
+      font-size: 10px;
+      font-weight: 700;
+
+      letter-spacing: 0.5px;
+    }
+
+    .model-dot {
+      width: 5px;
+      height: 5px;
+
+      border-radius: 50%;
+
+      background: var(--purple-light);
+
+      box-shadow:
+        0 0 8px rgba(155,135,255,0.7);
+    }
+
+    /* =========================================================
+       CHAT
+       ========================================================= */
+
+    .chat {
+      position: relative;
+
+      flex: 1;
+
+      overflow-y: auto;
+      overflow-x: hidden;
+
+      padding:
+        25px 20px 175px;
+
+      scroll-behavior: smooth;
+    }
+
+    .chat-inner {
+      width: 100%;
+      max-width: var(--content-width);
+
+      margin:
+        0 auto;
+    }
+
+    /* =========================================================
+       WELCOME
+       ========================================================= */
+
+    .welcome {
+      min-height:
+        calc(100vh - 280px);
+
+      display:
+        flex;
+
+      flex-direction:
+        column;
+
+      justify-content:
+        center;
+
+      align-items:
+        center;
+
+      text-align:
+        center;
+
+      padding:
+        35px 20px;
+    }
+
+    .welcome-icon {
+      position: relative;
+
+      width: 76px;
+      height: 76px;
+
+      display: grid;
+      place-items: center;
+
+      margin-bottom: 22px;
+
+      border-radius: 24px;
+
+      color: white;
+
+      font-size: 29px;
+      font-weight: 850;
+
+      background:
+        linear-gradient(
+          135deg,
+          var(--purple),
+          var(--blue)
+        );
+
+      box-shadow:
+        0 0 65px rgba(124,92,255,0.24),
+        inset 0 1px 0 rgba(255,255,255,0.2);
+
+      animation:
+        floating 4s ease-in-out infinite;
+    }
+
+    .welcome-icon::before {
+      content: "";
+
+      position: absolute;
+
+      inset: -7px;
+
+      border-radius: 29px;
+
+      border:
+        1px solid rgba(124,92,255,0.14);
+
+      animation:
+        pulseGlow 3s ease-in-out infinite;
+    }
+
+    @keyframes floating {
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-5px);
+      }
+    }
+
+    @keyframes pulseGlow {
+      0%,
+      100% {
+        opacity: 0.4;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 1;
+        transform: scale(1.04);
+      }
+    }
+
+    .welcome h1 {
+      color: white;
+
+      font-size:
+        clamp(30px, 5vw, 48px);
+
+      line-height: 1.08;
+
+      letter-spacing:
+        -1.9px;
+
+      font-weight: 800;
+    }
+
+    .welcome h1 span {
+      background:
+        linear-gradient(
+          90deg,
+          #ffffff 0%,
+          #a998ff 45%,
+          #65a4ff 100%
+        );
+
+      -webkit-background-clip:
+        text;
+
+      background-clip:
+        text;
+
+      color:
+        transparent;
+    }
+
+    .welcome p {
+      max-width: 620px;
+
+      margin-top: 15px;
+
+      color: var(--muted);
+
+      font-size: 13px;
+
+      line-height: 1.75;
+    }
+
+    /* =========================================================
+       SUGGESTIONS
+       ========================================================= */
+
+    .suggestions {
+      width: 100%;
+      max-width: 720px;
+
+      display:
+        grid;
+
+      grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+
+      gap: 9px;
+
+      margin-top: 28px;
+    }
+
+    .suggestion {
+      position: relative;
+
+      min-height: 65px;
+
+      display: flex;
+      flex-direction: column;
+
+      align-items: flex-start;
+      justify-content: center;
+
+      padding:
+        12px 14px;
+
+      border-radius: 13px;
+
+      color: #c9cde0;
+
+      text-align: left;
+
+      background:
+        rgba(255,255,255,0.035);
+
+      border:
+        1px solid var(--border);
+
+      transition:
+        transform 0.2s ease,
+        background 0.2s ease,
+        border-color 0.2s ease;
+    }
+
+    .suggestion:hover {
+      transform:
+        translateY(-2px);
+
+      color: white;
+
+      background:
+        rgba(124,92,255,0.09);
+
+      border-color:
+        rgba(124,92,255,0.25);
+    }
+
+    .suggestion-icon {
+      margin-bottom: 5px;
+
+      color: var(--purple-light);
+
+      font-size: 13px;
+    }
+
+    .suggestion-title {
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .suggestion-desc {
+      margin-top: 2px;
+
+      color: var(--muted-dark);
+
+      font-size: 10px;
+    }
+
+    /* =========================================================
+       MESSAGE
+       ========================================================= */
+
+    .message {
+      display: flex;
+
+      align-items: flex-start;
+
+      gap: 11px;
+
+      margin-bottom: 24px;
+
+      animation:
+        messageIn 0.22s ease;
+    }
+
+    @keyframes messageIn {
+      from {
+        opacity: 0;
+        transform:
+          translateY(7px);
+      }
+
+      to {
+        opacity: 1;
+        transform:
+          translateY(0);
+      }
+    }
+
+    .message.user {
+      flex-direction:
+        row-reverse;
+    }
+
+    .avatar {
+      width: 35px;
+      height: 35px;
+
+      flex: 0 0 35px;
+
+      display: grid;
+      place-items: center;
+
+      border-radius: 11px;
+
+      color: #cdd0df;
+
+      background:
+        rgba(255,255,255,0.055);
+
+      border:
+        1px solid var(--border);
+
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .message.user .avatar {
+      color: white;
+
+      background:
+        linear-gradient(
+          135deg,
+          var(--purple),
+          var(--blue)
+        );
+
+      border:
+        0;
+
+      box-shadow:
+        0 5px 20px rgba(124,92,255,0.15);
+    }
+
+    .message-content {
+      min-width: 0;
+
+      max-width:
+        min(760px, 82%);
+    }
+
+    .message-meta {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+
+      margin-bottom: 5px;
+
+      color: var(--muted-dark);
+
+      font-size: 9px;
+      font-weight: 600;
+    }
+
+    .message.user .message-meta {
+      justify-content: flex-end;
+    }
+
+    .bubble {
+      width: fit-content;
+      max-width: 100%;
+
+      padding:
+        12px 15px;
+
+      border-radius: 15px;
+
+      color: #e8eaf3;
+
+      background:
+        rgba(255,255,255,0.045);
+
+      border:
+        1px solid var(--border);
+
+      font-size: 13px;
+
+      line-height: 1.72;
+
+      white-space: pre-wrap;
+
+      word-break:
+        break-word;
+    }
+
+    .message.user .bubble {
+      margin-left: auto;
+
+      color: white;
+
+      background:
+        linear-gradient(
+          135deg,
+          rgba(124,92,255,0.9),
+          rgba(61,139,255,0.78)
+        );
+
+      border:
+        0;
+
+      box-shadow:
+        0 8px 28px rgba(61,139,255,0.08);
+    }
+
+    /* =========================================================
+       MESSAGE FORMATTING
+       ========================================================= */
+
+    .bubble strong {
+      color: white;
+
+      font-weight: 750;
+    }
+
+    .bubble code {
+      padding:
+        2px 5px;
+
+      border-radius: 5px;
+
+      color: #cfc5ff;
+
+      background:
+        rgba(0,0,0,0.24);
+
+      font-family:
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        monospace;
+
+      font-size: 11px;
+    }
+
+    .bubble pre {
+      margin:
+        10px 0;
+
+      padding:
+        13px;
+
+      overflow-x: auto;
+
+      border-radius:
+        10px;
+
+      background:
+        #05060b;
+
+      border:
+        1px solid rgba(255,255,255,0.07);
+
+      line-height: 1.55;
+    }
+
+    .bubble pre code {
+      padding: 0;
+
+      background: transparent;
+
+      color: #dce0ee;
+
+      font-size: 11px;
+    }
+
+    .bubble a {
+      color:
+        #a99aff;
+
+      text-decoration:
+        none;
+    }
+
+    .bubble a:hover {
+      text-decoration:
+        underline;
+    }
+
+    /* =========================================================
+       MESSAGE ACTIONS
+       ========================================================= */
+
+    .message-actions {
+      display: flex;
+      align-items: center;
+
+      gap: 4px;
+
+      margin-top: 6px;
+    }
+
+    .message.user .message-actions {
+      justify-content: flex-end;
+    }
+
+    .message-action {
+      width: 27px;
+      height: 27px;
+
+      display: grid;
+      place-items: center;
+
+      border-radius: 8px;
+
+      color: var(--muted);
+
+      background: transparent;
+
+      font-size: 11px;
+
+      transition: 0.18s;
+    }
+
+    .message-action:hover {
+      color: white;
+
+      background:
+        rgba(255,255,255,0.06);
+    }
+
+    /* =========================================================
+       SOURCES
+       ========================================================= */
+
+    .sources {
+      display: flex;
+      flex-direction: column;
+
+      gap: 5px;
+
+      margin-top: 8px;
+    }
+
+    .sources-label {
+      color: var(--muted-dark);
+
+      font-size: 9px;
+      font-weight: 700;
+
+      text-transform: uppercase;
+
+      letter-spacing: 0.8px;
+    }
+
+    .source-link {
+      display: block;
+
+      width: fit-content;
+      max-width: 100%;
+
+      padding:
+        6px 9px;
+
+      overflow: hidden;
+
+      color: #a99aff;
+
+      background:
+        rgba(124,92,255,0.05);
+
+      border:
+        1px solid rgba(124,92,255,0.11);
+
+      border-radius: 7px;
+
+             sources
       );
 
     }
