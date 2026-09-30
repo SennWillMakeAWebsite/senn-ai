@@ -1711,6 +1711,824 @@ const API = {
 const state = {
   conversation: [],
   history: [],
+  sen SFMono-Regular,
+    Consolas,
+    monospace;
+
+  font-size:
+    12px;
+}
+
+.bubble pre {
+  margin:
+    10px 0;
+
+  padding:
+    13px;
+
+  overflow-x:
+    auto;
+
+  border-radius:
+    10px;
+
+  background:
+    rgba(0,0,0,.35);
+
+  border:
+    1px solid
+    rgba(255,255,255,.06);
+}
+
+.bubble pre code {
+  padding:
+    0;
+
+  background:
+    transparent;
+
+  color:
+    #e4e6f0;
+
+  font-size:
+    12px;
+
+  line-height:
+    1.6;
+}
+
+.bubble a {
+  color:
+    #a995ff;
+
+  text-decoration:
+    none;
+}
+
+.bubble a:hover {
+  text-decoration:
+    underline;
+}
+
+
+/* =========================================================
+   SOURCES
+========================================================= */
+
+.sources {
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  gap:
+    5px;
+
+  margin-top:
+    8px;
+}
+
+.sources-label {
+  color:
+    var(--muted-2);
+
+  font-size:
+    10px;
+
+  text-transform:
+    uppercase;
+
+  letter-spacing:
+    .7px;
+}
+
+.source-link {
+  display:
+    block;
+
+  max-width:
+    100%;
+
+  overflow:
+    hidden;
+
+  white-space:
+    nowrap;
+
+  text-overflow:
+    ellipsis;
+
+  color:
+    #9f91ff;
+
+  font-size:
+    11px;
+
+  text-decoration:
+    none;
+}
+
+.source-link:hover {
+  text-decoration:
+    underline;
+}
+
+
+/* =========================================================
+   TYPING
+========================================================= */
+
+.typing {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    4px;
+
+  height:
+    20px;
+}
+
+.typing span {
+  width:
+    6px;
+
+  height:
+    6px;
+
+  border-radius:
+    50%;
+
+  background:
+    #9da2b7;
+
+  animation:
+    typing 1s infinite;
+}
+
+.typing span:nth-child(2) {
+  animation-delay:
+    .15s;
+}
+
+.typing span:nth-child(3) {
+  animation-delay:
+    .3s;
+}
+
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    opacity:
+      .3;
+
+    transform:
+      translateY(0);
+  }
+
+  30% {
+    opacity:
+      1;
+
+    transform:
+      translateY(-3px);
+  }
+}
+
+
+/* =========================================================
+   COMPOSER
+========================================================= */
+
+.composer-wrap {
+  position:
+    absolute;
+
+  left:
+    0;
+
+  right:
+    0;
+
+  bottom:
+    0;
+
+  padding:
+    20px;
+
+  background:
+    linear-gradient(
+      transparent,
+      var(--bg) 34%
+    );
+
+  z-index:
+    20;
+}
+
+.composer {
+  width:
+    100%;
+
+  max-width:
+    850px;
+
+  margin:
+    0 auto;
+
+  display:
+    flex;
+
+  align-items:
+    flex-end;
+
+  gap:
+    9px;
+
+  padding:
+    10px;
+
+  border-radius:
+    17px;
+
+  background:
+    rgba(18,20,35,.94);
+
+  border:
+    1px solid
+    rgba(255,255,255,.09);
+
+  box-shadow:
+    0 18px 55px
+    rgba(0,0,0,.28);
+
+  backdrop-filter:
+    blur(22px);
+
+  -webkit-backdrop-filter:
+    blur(22px);
+
+  transition:
+    border .2s,
+    box-shadow .2s;
+}
+
+.composer:focus-within {
+  border-color:
+    rgba(121,92,255,.3);
+
+  box-shadow:
+    0 18px 55px
+    rgba(0,0,0,.3),
+    0 0 0 3px
+    rgba(121,92,255,.05);
+}
+
+.composer textarea {
+  flex:
+    1;
+
+  width:
+    100%;
+
+  min-height:
+    42px;
+
+  max-height:
+    150px;
+
+  resize:
+    none;
+
+  overflow-y:
+    auto;
+
+  border:
+    0;
+
+  outline:
+    0;
+
+  background:
+    transparent;
+
+  color:
+    white;
+
+  padding:
+    10px 8px;
+
+  font-size:
+    14px;
+
+  line-height:
+    1.5;
+}
+
+.composer textarea::placeholder {
+  color:
+    #686d82;
+}
+
+.send {
+  width:
+    42px;
+
+  height:
+    42px;
+
+  flex:
+    0 0 42px;
+
+  display:
+    grid;
+
+  place-items:
+    center;
+
+  border-radius:
+    12px;
+
+  background:
+    linear-gradient(
+      135deg,
+      var(--purple),
+      var(--blue)
+    );
+
+  color:
+    white;
+
+  font-size:
+    18px;
+
+  cursor:
+    pointer;
+
+  transition:
+    .2s;
+}
+
+.send:hover:not(:disabled) {
+  transform:
+    translateY(-2px);
+
+  box-shadow:
+    0 8px 24px
+    rgba(121,92,255,.3);
+}
+
+.send:active:not(:disabled) {
+  transform:
+    scale(.95);
+}
+
+.send:disabled {
+  opacity:
+    .45;
+
+  cursor:
+    not-allowed;
+}
+
+.composer-note {
+  max-width:
+    850px;
+
+  margin:
+    8px auto 0;
+
+  text-align:
+    center;
+
+  color:
+    #555a70;
+
+  font-size:
+    10px;
+}
+
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width:760px) {
+
+  .sidebar {
+    position:
+      fixed;
+
+    top:
+      0;
+
+    left:
+      0;
+
+    transform:
+      translateX(-105%);
+
+    box-shadow:
+      15px 0 50px
+      rgba(0,0,0,.35);
+  }
+
+  .sidebar.open {
+    transform:
+      translateX(0);
+  }
+
+  .mobile-menu {
+    display:
+      grid;
+
+    place-items:
+      center;
+  }
+
+  .topbar {
+    padding:
+      0 14px;
+  }
+
+  .chat {
+    padding:
+      22px 12px 150px;
+  }
+
+  .welcome {
+    min-height:
+      calc(100vh - 250px);
+
+    padding:
+      20px 5px;
+  }
+
+  .welcome h1 {
+    font-size:
+      30px;
+  }
+
+  .welcome p {
+    font-size:
+      13px;
+  }
+
+  .message-content {
+    max-width:
+      84%;
+  }
+
+  .bubble {
+    font-size:
+      13px;
+  }
+
+  .composer-wrap {
+    padding:
+      12px;
+  }
+
+  .composer-note {
+    font-size:
+      9px;
+  }
+
+}
+
+@media (max-width:430px) {
+
+  .model-badge {
+    display:
+      none;
+  }
+
+  .suggestion {
+    font-size:
+      11px;
+
+    padding:
+      9px 11px;
+  }
+
+  .avatar {
+    width:
+      31px;
+
+    height:
+      31px;
+
+    flex-basis:
+      31px;
+  }
+
+}
+
+
+/* =========================================================
+   OVERLAY MOBILE
+========================================================= */
+
+.sidebar-overlay {
+  display:
+    none;
+
+  position:
+    fixed;
+
+  inset:
+    0;
+
+  background:
+    rgba(0,0,0,.45);
+
+  backdrop-filter:
+    blur(2px);
+
+  z-index:
+    40;
+}
+
+.sidebar-overlay.active {
+  display:
+    block;
+}
+
+@media (min-width:761px) {
+  .sidebar-overlay {
+    display:
+      none !important;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+  <!-- =====================================================
+       SIDEBAR
+  ====================================================== -->
+
+  <aside
+    class="sidebar"
+    id="sidebar"
+  >
+
+    <div class="brand">
+
+      <div class="brand-logo">
+        S
+      </div>
+
+      <div>
+        <div class="brand-name">
+          Senn AI
+        </div>
+
+        <div class="brand-version">
+          Version 2.0
+        </div>
+      </div>
+
+    </div>
+
+
+    <button
+      class="new-chat"
+      id="newChat"
+      type="button"
+    >
+      ＋ New conversation
+    </button>
+
+
+    <div class="sidebar-label">
+      Recent
+    </div>
+
+
+    <div
+      class="chat-history"
+      id="chatHistory"
+    ></div>
+
+
+    <div class="sidebar-bottom">
+
+      <div class="status">
+
+        <span
+          class="status-dot"
+          id="statusDot"
+        ></span>
+
+        <span id="statusText">
+          Connecting...
+        </span>
+
+      </div>
+
+    </div>
+
+  </aside>
+
+
+  <div
+    class="sidebar-overlay"
+    id="sidebarOverlay"
+  ></div>
+
+
+  <!-- =====================================================
+       MAIN
+  ====================================================== -->
+
+  <main class="main">
+
+    <!-- TOPBAR -->
+
+    <header class="topbar">
+
+      <div class="top-left">
+
+        <button
+          class="mobile-menu"
+          id="mobileMenu"
+          type="button"
+          aria-label="Open menu"
+        >
+          ☰
+        </button>
+
+        <div>
+
+          <div class="top-title">
+            Senn AI
+          </div>
+
+          <div class="top-subtitle">
+            Intelligent assistant
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="model-badge">
+        SENN V2
+      </div>
+
+    </header>
+
+
+    <!-- CHAT -->
+
+    <section
+      class="chat"
+      id="chat"
+    >
+
+      <div
+        class="chat-inner"
+        id="chatInner"
+      >
+
+        <!-- WELCOME -->
+
+        <div
+          class="welcome"
+          id="welcome"
+        >
+
+          <div class="welcome-icon">
+            S
+          </div>
+
+          <h1>
+            Meet <span>Senn AI</span>
+          </h1>
+
+          <p>
+            Asisten AI generasi baru yang memahami
+            percakapan, konteks, bahasa singkat,
+            pencarian informasi, dan berbagai
+            kebutuhan dalam satu ruang.
+          </p>
+
+
+          <div class="suggestions">
+
+            <button
+              class="suggestion"
+              data-message="Jelasin apa itu AI dengan bahasa sederhana"
+              type="button"
+            >
+              Jelasin AI
+            </button>
+
+            <button
+              class="suggestion"
+              data-message="Bantu gw bikin website"
+              type="button"
+            >
+              Bantu coding
+            </button>
+
+            <button
+              class="suggestion"
+              data-message="Cari informasi teknologi terbaru"
+              type="button"
+            >
+              Cari informasi
+            </button>
+
+            <button
+              class="suggestion"
+              data-message="Hitung 125 * 24"
+              type="button"
+            >
+              Hitung sesuatu
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- COMPOSER -->
+
+    <div class="composer-wrap">
+
+      <form
+        class="composer"
+        id="composer"
+      >
+
+        <textarea
+          id="messageInput"
+          rows="1"
+          placeholder="Message Senn AI..."
+          autocomplete="off"
+          spellcheck="true"
+        ></textarea>
+
+
+        <button
+          class="send"
+          id="sendButton"
+          type="submit"
+          aria-label="Send message"
+        >
+          ↑
+        </button>
+
+      </form>
+
+
+      <div class="composer-note">
+        Senn AI can make mistakes. Verify important information.
+      </div>
+
+    </div>
+
+  </main>
+
+</div>
+
+
+<script>
+"use strict";
+
+
+/* =========================================================
+   CONFIG
+========================================================= */
+
+const API = {
+  chat: "/api/chat",
+  status: "/api/status"
+};
+
+
+/* =========================================================
+   STATE
+========================================================= */
+
+const state = {
+  conversation: [],
+  history: [],
   senebkit-backdrop-filter:
         blur(22px);
     }
