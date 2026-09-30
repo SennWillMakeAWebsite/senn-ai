@@ -1,13 +1,12 @@
 /**
  * SENN AI 2.0
- * Tool & Intent Router
+ * Request Router
  *
  * Tugas:
- * - membaca pesan user
- * - menentukan kebutuhan utama
- * - menentukan apakah perlu tool
- * - menentukan tool yang mungkin digunakan
- * - menyiapkan routing untuk AI Core
+ * - memahami intent
+ * - mendeteksi kebutuhan tool
+ * - menentukan execution plan
+ * - menjadi penghubung antara user dan tool engine
  */
 
 const TOOL_RULES = {
@@ -25,14 +24,18 @@ const TOOL_RULES = {
     "google",
     "internet",
     "siapa",
-    "kapan"
+    "kapan",
+    "dimana",
+    "di mana",
+    "lokasi"
   ],
 
   calculator: [
     "hitung",
     "berapa hasil",
     "kalkulasi",
-    "calculate"
+    "calculate",
+    "berapa"
   ],
 
   weather: [
@@ -59,12 +62,12 @@ const TOOL_RULES = {
 };
 
 
-/**
- * Normalisasi sederhana.
- *
- * Ini BELUM menjadi Language Layer final.
- * Language Layer akan kita bangun di file terpisah.
- */
+/*
+|--------------------------------------------------------------------------
+| TEXT NORMALIZATION
+|--------------------------------------------------------------------------
+*/
+
 function normalizeText(text) {
   return text
     .toLowerCase()
@@ -73,37 +76,21 @@ function normalizeText(text) {
 }
 
 
-/**
- * Mencari kemungkinan tool berdasarkan pesan.
- */
-function detectTools(message) {
-  const text = normalizeText(message);
+/*
+|--------------------------------------------------------------------------
+| INTENT DETECTION
+|--------------------------------------------------------------------------
+*/
 
-  const detectedTools = [];
-
-  for (const [toolName, keywords] of Object.entries(TOOL_RULES)) {
-    const matched = keywords.some((keyword) =>
-      text.includes(keyword)
-    );
-
-    if (matched) {
-      detectedTools.push(toolName);
-    }
-  }
-
-  return detectedTools;
-}
-
-
-/**
- * Menentukan kategori dasar pertanyaan.
- */
 function detectIntent(message) {
-  const text = normalizeText(message);
+
+  const text =
+    normalizeText(message);
 
   if (!text) {
     return "empty";
   }
+
 
   if (
     text.includes("?") ||
@@ -112,10 +99,15 @@ function detectIntent(message) {
     text.startsWith("bagaimana ") ||
     text.startsWith("gimana ") ||
     text.startsWith("kapan ") ||
-    text.startsWith("siapa ")
+    text.startsWith("siapa ") ||
+    text.startsWith("dimana ") ||
+    text.startsWith("di mana ")
   ) {
+
     return "question";
+
   }
+
 
   if (
     text.startsWith("buat ") ||
@@ -123,78 +115,271 @@ function detectIntent(message) {
     text.startsWith("buatkan ") ||
     text.startsWith("bikinin ")
   ) {
+
     return "creation";
+
   }
+
 
   if (
     text.includes("error") ||
     text.includes("bug") ||
     text.includes("rusak") ||
     text.includes("tidak bekerja") ||
-    text.includes("gak jalan")
+    text.includes("gak jalan") ||
+    text.includes("ga jalan")
   ) {
+
     return "debugging";
+
   }
+
 
   if (
     text.includes("jelaskan") ||
     text.includes("jelasin") ||
     text.includes("explain")
   ) {
+
     return "explanation";
+
   }
+
 
   return "conversation";
 }
 
 
-/**
- * Menentukan apakah pesan membutuhkan tool.
- */
-function requiresTool(tools) {
-  return tools.length > 0;
+/*
+|--------------------------------------------------------------------------
+| TOOL DETECTION
+|--------------------------------------------------------------------------
+*/
+
+function detectTools(message) {
+
+  const text =
+    normalizeText(message);
+
+  const detectedTools = [];
+
+
+  for (
+    const [toolName, keywords]
+    of Object.entries(TOOL_RULES)
+  ) {
+
+    const matched =
+      keywords.some(
+        (keyword) =>
+          text.includes(keyword)
+      );
+
+
+    if (matched) {
+
+      detectedTools.push(
+        toolName
+      );
+
+    }
+
+  }
+
+
+  /*
+   * Remove duplicate tools.
+   */
+
+  return [
+    ...new Set(
+      detectedTools
+    )
+  ];
 }
 
 
-/**
- * Router utama.
- */
-export function routeRequest({
-  message,
-  conversation = [],
-  settings = {}
+/*
+|--------------------------------------------------------------------------
+| TOOL PRIORITY
+|--------------------------------------------------------------------------
+*/
+
+function prioritizeTools(
+  tools
+) {
+
+  const priority = {
+
+    web_search: 1,
+
+    files: 2,
+
+    calculator: 3,
+
+    weather: 4,
+
+    time: 5
+
+  };
+
+
+  return [
+    ...tools
+  ].sort(
+    (a, b) =>
+      (priority[a] || 99) -
+      (priority[b] || 99)
+  );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| EXECUTION PLAN
+|--------------------------------------------------------------------------
+*/
+
+function buildExecutionPlan({
+  intent,
+  tools
 }) {
-  const normalizedMessage = normalizeText(message);
 
-  const intent = detectIntent(normalizedMessage);
+  const prioritizedTools =
+    prioritizeTools(tools);
 
-  const tools = detectTools(normalizedMessage);
+
+  /*
+   * Tidak membutuhkan tool.
+   */
+
+  if (
+    prioritizedTools.length === 0
+  ) {
+
+    return {
+
+      mode:
+        "ai",
+
+      tools: [],
+
+      requiresExternalData:
+        false
+
+    };
+
+  }
+
+
+  /*
+   * Membutuhkan external tool.
+   */
 
   return {
-    originalMessage: message,
+
+    mode:
+      "tool",
+
+    tools:
+      prioritizedTools,
+
+    requiresExternalData:
+      true
+
+  };
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| MAIN ROUTER
+|--------------------------------------------------------------------------
+*/
+
+export function routeRequest({
+
+  message,
+
+  conversation = [],
+
+  settings = {}
+
+}) {
+
+  const normalizedMessage =
+    normalizeText(message);
+
+
+  const intent =
+    detectIntent(
+      normalizedMessage
+    );
+
+
+  const tools =
+    detectTools(
+      normalizedMessage
+    );
+
+
+  const execution =
+    buildExecutionPlan({
+      intent,
+      tools
+    });
+
+
+  return {
+
+    originalMessage:
+      message,
 
     normalizedMessage,
 
     intent,
 
-    requiresTool: requiresTool(tools),
+    requiresTool:
+      execution.tools.length > 0,
 
-    tools,
+    tools:
+      execution.tools,
+
+    execution,
 
     context: {
-      conversationLength: conversation.length
+
+      conversationLength:
+        conversation.length
+
     },
 
     settings
+
   };
+
 }
 
 
-/**
- * Export tambahan untuk testing.
- */
+/*
+|--------------------------------------------------------------------------
+| EXPORTS
+|--------------------------------------------------------------------------
+*/
+
 export {
+
+  TOOL_RULES,
+
   normalizeText,
+
   detectIntent,
-  detectTools
+
+  detectTools,
+
+  prioritizeTools,
+
+  buildExecutionPlan
+
 };
