@@ -3,77 +3,130 @@
  * AI Core
  *
  * Tugas:
- * - menghubungkan Senn dengan AI model
- * - membangun system instructions
- * - memasukkan conversation context
- * - memasukkan hasil Language Layer
- * - menyiapkan tool support
- * - menghasilkan response terstruktur
+ * - mengirim request ke AI provider
+ * - membawa context percakapan
+ * - membawa hasil tool
+ * - menghasilkan jawaban final
  */
 
 const OPENAI_API_URL =
   "https://api.openai.com/v1/responses";
 
+
 const DEFAULT_MODEL =
-  process.env.AI_MODEL || "gpt-5.6-luna";
+  process.env.AI_MODEL ||
+  "gpt-5.6-luna";
 
 
 /*
 |--------------------------------------------------------------------------
-| SENN SYSTEM IDENTITY
+| SYSTEM PROMPT
 |--------------------------------------------------------------------------
 */
 
 const SENN_SYSTEM_PROMPT = `
 You are Senn AI.
 
-You are an intelligent general-purpose AI assistant
-created as part of the Senn AI project.
+You are a general-purpose AI assistant.
 
-CORE BEHAVIOR:
-- Understand natural human language.
-- Understand Indonesian informal chat.
-- Understand abbreviations, slang, typos, mixed Indonesian-English,
-  and short contextual messages.
-- Preserve the user's intended meaning.
-- Use previous conversation context when necessary.
-- Do not invent facts when reliable information is unavailable.
-- When tools are available and appropriate, use them.
-- Give clear, useful, direct answers.
-- Match the user's language naturally.
-- Do not unnecessarily formalize casual Indonesian.
-- Do not mention internal system architecture unless asked.
+Your job is to:
+- understand the user's actual intent
+- understand informal Indonesian
+- understand abbreviations and slang
+- maintain conversation context
+- use external tool results when provided
+- answer clearly and naturally
+- avoid inventing facts
+- distinguish current information from general knowledge
+- use web results when they are available
+- never pretend that a tool was used when it was not
 
 LANGUAGE:
-The user may write things such as:
-"gmn", "udh", "blm", "gmw", "ga", "yg", "klo",
-"bgt", "bikin", "gas", "ok", "y", or other informal forms.
 
-Understand their meaning from context.
+The user may write:
+- Indonesian
+- English
+- mixed Indonesian-English
+- slang
+- abbreviations
+- typos
+- very short messages
 
-IMPORTANT:
-The original user message is authoritative.
-Language normalization is only an interpretation aid.
+Examples:
+
+"y"
+"ok"
+"gmn"
+"gmw"
+"ga"
+"gak"
+"yg"
+"udh"
+"udah"
+"blm"
+"bgt"
+"aja"
+"knp"
+"trs"
+"lanjut"
+"next"
+
+Understand these based on context.
+
+Do not force formal Indonesian unless the user asks for it.
 
 CONTEXT:
-A short message may depend heavily on previous messages.
-Examples:
-"gunanya?"
-"terus?"
-"yang tadi?"
-"ok"
-"y"
-"gmn?"
 
-Use conversation context to understand these messages.
+Previous messages are important.
+
+If the user says:
+"terus?"
+"lanjut"
+"yang tadi"
+"itu"
+"gimana?"
+"bikin"
+"next"
+
+interpret them using the conversation context.
+
+WEB INFORMATION:
+
+If external tool results are provided, use them as factual context.
+
+Do not invent sources.
+
+Do not claim something is current unless current information was actually obtained.
+
+If sources are available, preserve their meaning.
 
 RESPONSE STYLE:
-- Be concise when the question is simple.
-- Be detailed when the task requires detail.
-- Explain technical subjects clearly.
-- If the user asks for code, provide usable code.
-- Do not fabricate sources, facts, tool results, or actions.
+
+Be useful.
+
+Be direct.
+
+Avoid unnecessary explanations.
+
+Match the user's language naturally.
+
+Do not repeat the user's entire question unnecessarily.
 `;
+
+
+/*
+|--------------------------------------------------------------------------
+| API KEY CHECK
+|--------------------------------------------------------------------------
+*/
+
+export function isAIConfigured() {
+
+  return Boolean(
+    process.env.AI_API_KEY
+  );
+
+}
 
 
 /*
@@ -83,166 +136,181 @@ RESPONSE STYLE:
 */
 
 function buildInstructions({
+
   languageAnalysis = null,
+
   contextPackage = null,
-  settings = {}
+
+  settings = {},
+
+  toolContext = ""
+
 }) {
 
-  const languageInfo =
+  const sections = [
+
+    SENN_SYSTEM_PROMPT
+
+  ];
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | LANGUAGE
+  |--------------------------------------------------------------------------
+  */
+
+  if (
     languageAnalysis
-      ? `
+  ) {
+
+    sections.push(`
+
 LANGUAGE ANALYSIS:
+
 ${JSON.stringify(
   languageAnalysis,
   null,
   2
 )}
-`
-      : "";
 
-  const contextInfo =
+`);
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | CONTEXT
+  |--------------------------------------------------------------------------
+  */
+
+  if (
     contextPackage
-      ? `
-CONTEXT PACKAGE:
+  ) {
+
+    sections.push(`
+
+CONVERSATION CONTEXT:
+
 ${JSON.stringify(
   contextPackage,
   null,
   2
 )}
-`
-      : "";
 
-  const settingsInfo =
-    Object.keys(settings).length > 0
-      ? `
+`);
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | SETTINGS
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    settings &&
+    Object.keys(settings).length
+  ) {
+
+    sections.push(`
+
 USER SETTINGS:
+
 ${JSON.stringify(
   settings,
   null,
   2
 )}
-`
-      : "";
 
-  return [
-    SENN_SYSTEM_PROMPT,
-    languageInfo,
-    contextInfo,
-    settingsInfo
-  ].join("\n");
-}
+`);
 
-
-/*
-|--------------------------------------------------------------------------
-| CONVERSATION → RESPONSES API INPUT
-|--------------------------------------------------------------------------
-*/
-
-function buildInput({
-  conversation = [],
-  message
-}) {
-
-  const input = [];
-
-  for (const item of conversation) {
-
-    if (
-      !item ||
-      !item.role ||
-      typeof item.content !== "string"
-    ) {
-      continue;
-    }
-
-    /*
-     * Tool messages akan kita tangani lebih
-     * lanjut ketika Tool Engine dibuat.
-     */
-
-    input.push({
-      role: item.role,
-      content: item.content
-    });
   }
+
 
   /*
-   * Current user message
-   */
-  input.push({
-    role: "user",
-    content: message
-  });
+  |--------------------------------------------------------------------------
+  | TOOL RESULTS
+  |--------------------------------------------------------------------------
+  */
 
-  return input;
+  if (
+    toolContext &&
+    toolContext.trim()
+  ) {
+
+    sections.push(`
+
+EXTERNAL TOOL RESULTS:
+
+The following information was retrieved
+from an external tool.
+
+Use it when answering the user.
+
+Do not invent information that is not
+supported by these results.
+
+${toolContext}
+
+`);
+
+  }
+
+
+  return sections.join("\n");
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| API REQUEST
+| CONVERSATION FORMATTER
 |--------------------------------------------------------------------------
 */
 
-async function requestOpenAI({
-  model,
-  instructions,
-  input,
-  tools = []
-}) {
+function formatConversation(
+  conversation = []
+) {
 
-  const apiKey =
-    process.env.AI_API_KEY;
+  if (
+    !Array.isArray(conversation)
+  ) {
 
-  if (!apiKey) {
-    throw new Error(
-      "AI_API_KEY is not configured."
-    );
+    return [];
+
   }
 
-  const body = {
-    model,
 
-    instructions,
+  return conversation
+    .filter(
+      (message) =>
+        message &&
+        (
+          message.role === "user" ||
+          message.role === "assistant" ||
+          message.role === "system"
+        )
+    )
+    .map(
+      (message) => ({
 
-    input,
+        role:
+          message.role,
 
-    tools,
+        content:
+          typeof message.content ===
+          "string"
+            ? message.content
+            : JSON.stringify(
+                message.content
+              )
 
-    store: false
-  };
-
-  const response =
-    await fetch(
-      OPENAI_API_URL,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          Authorization:
-            `Bearer ${apiKey}`
-        },
-
-        body:
-          JSON.stringify(body)
-      }
+      })
     );
 
-  if (!response.ok) {
-
-    const errorText =
-      await response.text();
-
-    throw new Error(
-      `OpenAI API ${response.status}: ${errorText}`
-    );
-  }
-
-  return response.json();
 }
 
 
@@ -253,179 +321,330 @@ async function requestOpenAI({
 */
 
 function extractResponseText(
-  response
+  data
 ) {
 
   if (
-    typeof response?.output_text ===
+    typeof data?.output_text ===
     "string"
   ) {
-    return response.output_text;
+
+    return data.output_text;
+
   }
 
-  /*
-   * Fallback parser.
-   */
+
   const output =
-    Array.isArray(response?.output)
-      ? response.output
+    Array.isArray(data?.output)
+      ? data.output
       : [];
 
-  const textParts = [];
 
-  for (const item of output) {
+  const parts = [];
+
+
+  for (
+    const item of output
+  ) {
 
     if (
-      item?.type === "message" &&
-      Array.isArray(item.content)
+      item?.type !== "message"
     ) {
 
-      for (
-        const content of item.content
+      continue;
+
+    }
+
+
+    if (
+      !Array.isArray(
+        item.content
+      )
+    ) {
+
+      continue;
+
+    }
+
+
+    for (
+      const content
+        of item.content
+    ) {
+
+      if (
+        content?.type ===
+        "output_text"
       ) {
 
         if (
-          content?.type ===
-          "output_text"
+          typeof content.text ===
+          "string"
         ) {
 
-          textParts.push(
+          parts.push(
             content.text
           );
+
         }
+
       }
+
     }
+
   }
 
-  return textParts.join("\n").trim();
+
+  return parts.join("\n").trim();
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| EXTRACT TOOL INFORMATION
-|--------------------------------------------------------------------------
-*/
-
-function extractToolCalls(
-  response
-) {
-
-  if (
-    !Array.isArray(response?.output)
-  ) {
-    return [];
-  }
-
-  return response.output
-    .filter(
-      (item) =>
-        item?.type ===
-        "function_call"
-    )
-    .map((item) => ({
-      id: item.call_id,
-      name: item.name,
-      arguments: item.arguments
-    }));
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| MAIN AI FUNCTION
+| GENERATE AI RESPONSE
 |--------------------------------------------------------------------------
 */
 
 export async function generateAIResponse({
+
   message,
+
   conversation = [],
+
   languageAnalysis = null,
+
   contextPackage = null,
+
   settings = {},
+
   tools = [],
+
+  toolContext = "",
+
   model = DEFAULT_MODEL
+
 }) {
 
   if (
-    !message ||
-    typeof message !== "string"
+    !isAIConfigured()
   ) {
+
     throw new Error(
-      "AI message is required."
+      "AI_API_KEY is not configured."
     );
+
   }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | INSTRUCTIONS
+  |--------------------------------------------------------------------------
+  */
 
   const instructions =
     buildInstructions({
+
       languageAnalysis,
+
       contextPackage,
-      settings
+
+      settings,
+
+      toolContext
+
     });
 
-  const input =
-    buildInput({
-      conversation,
-      message
-    });
 
-  const response =
-    await requestOpenAI({
-      model,
-      instructions,
-      input,
-      tools
-    });
+  /*
+  |--------------------------------------------------------------------------
+  | CONVERSATION
+  |--------------------------------------------------------------------------
+  */
 
-  const text =
-    extractResponseText(
-      response
+  const history =
+    formatConversation(
+      conversation
     );
 
-  const toolCalls =
-    extractToolCalls(
-      response
-    );
 
-  return {
-    id:
-      response.id ||
-      crypto.randomUUID(),
+  /*
+  |--------------------------------------------------------------------------
+  | CURRENT USER MESSAGE
+  |--------------------------------------------------------------------------
+  */
+
+  const input = [
+
+    ...history,
+
+    {
+
+      role:
+        "user",
+
+      content:
+        message
+
+    }
+
+  ];
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | REQUEST
+  |--------------------------------------------------------------------------
+  */
+
+  const body = {
 
     model,
 
-    text,
+    instructions,
 
-    toolCalls,
+    input,
 
-    raw: response
+    store: false
+
   };
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | OPTIONAL TOOLS
+  |--------------------------------------------------------------------------
+  |
+  | Tool execution saat ini dilakukan
+  | oleh server.js.
+  |
+  | Array ini sengaja tidak langsung
+  | mengaktifkan tools provider.
+  |
+  */
+
+  if (
+    Array.isArray(tools) &&
+    tools.length > 0
+  ) {
+
+    body.tools =
+      tools;
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | API REQUEST
+  |--------------------------------------------------------------------------
+  */
+
+  const response =
+    await fetch(
+      OPENAI_API_URL,
+      {
+
+        method:
+          "POST",
+
+        headers: {
+
+          "Content-Type":
+            "application/json",
+
+          Authorization:
+            `Bearer ${process.env.AI_API_KEY}`
+
+        },
+
+        body:
+          JSON.stringify(
+            body
+          )
+
+      }
+
+    );
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | API ERROR
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    !response.ok
+  ) {
+
+    const errorText =
+      await response.text();
+
+
+    throw new Error(
+      `AI request failed (${response.status}): ${errorText}`
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | RESPONSE
+  |--------------------------------------------------------------------------
+  */
+
+  const data =
+    await response.json();
+
+
+  const text =
+    extractResponseText(
+      data
+    );
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | FINAL RESULT
+  |--------------------------------------------------------------------------
+  */
+
+  return {
+
+    id:
+      data.id ||
+      null,
+
+    text:
+      text ||
+      "Senn belum menerima jawaban dari AI.",
+
+    model:
+      data.model ||
+      model,
+
+    toolCalls:
+      [],
+
+    raw:
+      data
+
+  };
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| SIMPLE HEALTH CHECK
-|--------------------------------------------------------------------------
-*/
-
-export function isAIConfigured() {
-  return Boolean(
-    process.env.AI_API_KEY
-  );
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| EXPORTS
+| EXPORT
 |--------------------------------------------------------------------------
 */
 
 export {
-  SENN_SYSTEM_PROMPT,
   buildInstructions,
-  buildInput,
-  extractResponseText,
-  extractToolCalls
+  formatConversation,
+  extractResponseText
 };
