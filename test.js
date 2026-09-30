@@ -1,46 +1,19 @@
-/**
- * SENN AI 2.0
- * System Test
- *
- * Test:
- * 1. Server
- * 2. Normal AI
- * 3. Web Search
- * 4. Short message
- * 5. Context
- */
+import "dotenv/config";
 
 const BASE_URL =
-  "http://localhost:3000";
+  `http://localhost:${process.env.PORT || 3000}`;
 
+
+/*
+|--------------------------------------------------------------------------
+| TEST HELPER
+|--------------------------------------------------------------------------
+*/
 
 async function request(
   endpoint,
-  body = null
+  options = {}
 ) {
-
-  const options = {
-
-    method:
-      body ? "POST" : "GET",
-
-    headers: {
-
-      "Content-Type":
-        "application/json"
-
-    }
-
-  };
-
-
-  if (body) {
-
-    options.body =
-      JSON.stringify(body);
-
-  }
-
 
   const response =
     await fetch(
@@ -53,13 +26,32 @@ async function request(
     await response.json();
 
 
+  console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+  console.log(
+    `${options.method || "GET"} ${endpoint}`
+  );
+
+  console.log(
+    `STATUS: ${response.status}`
+  );
+
+  console.log(
+    JSON.stringify(
+      data,
+      null,
+      2
+    )
+  );
+
+  console.log(
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+  );
+
+
   return {
-
-    status:
-      response.status,
-
+    response,
     data
-
   };
 
 }
@@ -68,28 +60,14 @@ async function request(
 /*
 |--------------------------------------------------------------------------
 | TEST 1
+| SERVER STATUS
 |--------------------------------------------------------------------------
 */
 
-async function testServer() {
+async function testStatus() {
 
-  console.log(
-    "\n[1] SERVER TEST"
-  );
-
-
-  const result =
-    await request(
-      "/api/status"
-    );
-
-
-  console.log(
-    JSON.stringify(
-      result.data,
-      null,
-      2
-    )
+  await request(
+    "/api/status"
   );
 
 }
@@ -98,41 +76,41 @@ async function testServer() {
 /*
 |--------------------------------------------------------------------------
 | TEST 2
+| NORMAL CONVERSATION
 |--------------------------------------------------------------------------
 */
 
-async function testNormalAI() {
+async function testConversation() {
 
-  console.log(
-    "\n[2] NORMAL AI TEST"
-  );
+  await request(
 
+    "/api/chat",
 
-  const result =
-    await request(
+    {
 
-      "/api/chat",
+      method:
+        "POST",
 
-      {
+      headers: {
 
-        message:
-          "jelasin apa itu HTML secara singkat",
+        "Content-Type":
+          "application/json"
 
-        conversation: [],
+      },
 
-        settings: {}
+      body:
+        JSON.stringify({
 
-      }
+          message:
+            "jelasin apa itu artificial intelligence dengan bahasa sederhana",
 
-    );
+          conversation:
+            []
 
+        })
 
-  console.log(
-    JSON.stringify(
-      result.data,
-      null,
-      2
-    )
+    }
+
   );
 
 }
@@ -141,41 +119,41 @@ async function testNormalAI() {
 /*
 |--------------------------------------------------------------------------
 | TEST 3
+| SHORT LANGUAGE
 |--------------------------------------------------------------------------
 */
 
-async function testWebSearch() {
+async function testShortLanguage() {
 
-  console.log(
-    "\n[3] WEB SEARCH TEST"
-  );
+  await request(
 
+    "/api/chat",
 
-  const result =
-    await request(
+    {
 
-      "/api/chat",
+      method:
+        "POST",
 
-      {
+      headers: {
 
-        message:
-          "berita teknologi terbaru hari ini",
+        "Content-Type":
+          "application/json"
 
-        conversation: [],
+      },
 
-        settings: {}
+      body:
+        JSON.stringify({
+
+          message:
+            "gmn cara bikin website",
+
+          conversation:
+            []
+
+        })
 
       }
 
-    );
-
-
-  console.log(
-    JSON.stringify(
-      result.data,
-      null,
-      2
-    )
   );
 
 }
@@ -184,63 +162,65 @@ async function testWebSearch() {
 /*
 |--------------------------------------------------------------------------
 | TEST 4
+| CONTEXT
 |--------------------------------------------------------------------------
 */
 
-async function testShortMessage() {
+async function testContext() {
 
-  console.log(
-    "\n[4] SHORT MESSAGE TEST"
-  );
+  const conversation = [
+
+    {
+
+      role:
+        "user",
+
+      content:
+        "Gw lagi bikin website Senn AI"
+
+    },
+
+    {
+
+      role:
+        "assistant",
+
+      content:
+        "Mantap. Senn AI bisa dikembangkan menjadi AI assistant."
+
+    }
+
+  ];
 
 
-  const result =
-    await request(
+  await request(
 
-      "/api/chat",
+    "/api/chat",
 
-      {
+    {
 
-        message:
-          "gmn?",
+      method:
+        "POST",
 
-        conversation: [
+      headers: {
 
-          {
+        "Content-Type":
+          "application/json"
 
-            role:
-              "user",
+      },
 
-            content:
-              "jelasin HTML"
+      body:
+        JSON.stringify({
 
-          },
+          message:
+            "lanjut",
 
-          {
+          conversation
 
-            role:
-              "assistant",
-
-            content:
-              "HTML adalah bahasa markup..."
-
-          }
-
-        ],
-
-        settings: {}
+        })
 
       }
 
-    );
-
-
-  console.log(
-    JSON.stringify(
-      result.data,
-      null,
-      2
-    )
   );
 
 }
@@ -248,57 +228,171 @@ async function testShortMessage() {
 
 /*
 |--------------------------------------------------------------------------
-| RUN ALL TESTS
+| TEST 5
+| CALCULATOR
 |--------------------------------------------------------------------------
 */
 
-async function runTests() {
+async function testCalculator() {
+
+  await request(
+
+    "/api/chat",
+
+    {
+
+      method:
+        "POST",
+
+      headers: {
+
+        "Content-Type":
+          "application/json"
+
+      },
+
+      body:
+        JSON.stringify({
+
+          message:
+            "hitung 125 * 24",
+
+          conversation:
+            []
+
+        })
+
+      }
+
+  );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| TEST 6
+| WEB SEARCH
+|--------------------------------------------------------------------------
+*/
+
+async function testWebSearch() {
+
+  await request(
+
+    "/api/chat",
+
+    {
+
+      method:
+        "POST",
+
+      headers: {
+
+        "Content-Type":
+          "application/json"
+
+      },
+
+      body:
+        JSON.stringify({
+
+          message:
+            "cari informasi teknologi AI terbaru",
+
+          conversation:
+            []
+
+        })
+
+      }
+
+  );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| RUN
+|--------------------------------------------------------------------------
+*/
+
+async function main() {
+
+  console.log("");
 
   console.log(
-    "\n======================================"
+    "███████╗███████╗███╗   ██╗███╗   ██╗"
   );
 
   console.log(
-    "       SENN AI 2.0 SYSTEM TEST"
+    "██╔════╝██╔════╝████╗  ██║████╗  ██║"
   );
 
   console.log(
-    "======================================"
+    "███████╗█████╗  ██╔██╗ ██║██╔██╗ ██║"
+  );
+
+  console.log(
+    "╚════██║██╔══╝  ██║╚██╗██║██║╚██╗██║"
+  );
+
+  console.log(
+    "███████║███████╗██║ ╚████║██║ ╚████║"
+  );
+
+  console.log(
+    "╚══════╝╚══════╝╚═╝  ╚═══╝╚═╝  ╚═══╝"
+  );
+
+  console.log("");
+
+  console.log(
+    "SENN AI V2 SYSTEM TEST"
+  );
+
+  console.log(
+    `Target: ${BASE_URL}`
   );
 
 
   try {
 
-    await testServer();
+    await testStatus();
 
-    await testNormalAI();
+    await testConversation();
+
+    await testShortLanguage();
+
+    await testContext();
+
+    await testCalculator();
 
     await testWebSearch();
 
-    await testShortMessage();
-
 
     console.log(
-      "\n======================================"
-    );
-
-    console.log(
-      "          TEST FINISHED"
-    );
-
-    console.log(
-      "======================================\n"
+      "✓ Semua test selesai."
     );
 
 
   } catch (error) {
 
+    console.error("");
+
     console.error(
-      "\nTEST ERROR:"
+      "✕ TEST FAILED"
     );
 
     console.error(
-      error
+      error.message
+    );
+
+    console.error("");
+
+    console.error(
+      "Pastikan server.js sedang berjalan."
     );
 
   }
@@ -306,4 +400,4 @@ async function runTests() {
 }
 
 
-runTests();
+main();
