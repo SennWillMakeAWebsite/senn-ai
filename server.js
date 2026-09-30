@@ -1466,6 +1466,804 @@ app.post(
 
       /*
       ----------------------------------------------------------------------
+      | TOOL EXECUT ];
+
+
+  if (
+    weatherKeywords.some(
+      keyword =>
+        text.includes(keyword)
+    )
+  ) {
+
+    tools.push(
+      "weather"
+    );
+
+  }
+
+
+  return [
+    ...new Set(tools)
+  ];
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| INTENT DETECTION
+|--------------------------------------------------------------------------
+*/
+
+function detectIntent(message) {
+
+  const text =
+    message
+      .toLowerCase()
+      .trim();
+
+
+  if (!text) {
+
+    return "empty";
+
+  }
+
+
+  if (
+    text.includes("?") ||
+    /^(apa|kenapa|bagaimana|gimana|siapa|kapan|dimana|di mana)\b/
+      .test(text)
+  ) {
+
+    return "question";
+
+  }
+
+
+  if (
+    /^(buat|bikin|buatkan|bikinin)\b/
+      .test(text)
+  ) {
+
+    return "creation";
+
+  }
+
+
+  if (
+    text.includes("error") ||
+    text.includes("bug") ||
+    text.includes("rusak") ||
+    text.includes("gak jalan") ||
+    text.includes("ga jalan")
+  ) {
+
+    return "debugging";
+
+  }
+
+
+  if (
+    text.includes("jelasin") ||
+    text.includes("jelaskan") ||
+    text.includes("explain")
+  ) {
+
+    return "explanation";
+
+  }
+
+
+  return "conversation";
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| LANGUAGE / SHORT MESSAGE ANALYSIS
+|--------------------------------------------------------------------------
+*/
+
+function analyzeLanguage(
+  message,
+  conversation = []
+) {
+
+  const text =
+    message
+      .toLowerCase()
+      .trim();
+
+
+  const slangMap = {
+
+    "gmn":
+      "gimana",
+
+    "gmw":
+      "nggak mau",
+
+    "ga":
+      "tidak",
+
+    "gak":
+      "tidak",
+
+    "yg":
+      "yang",
+
+    "udh":
+      "sudah",
+
+    "udah":
+      "sudah",
+
+    "blm":
+      "belum",
+
+    "bgt":
+      "banget",
+
+    "knp":
+      "kenapa",
+
+    "trs":
+      "terus",
+
+    "aja":
+      "saja"
+
+  };
+
+
+  let normalized =
+    text;
+
+
+  const detectedSlang = [];
+
+
+  for (
+    const [
+      slang,
+      replacement
+    ]
+    of Object.entries(
+      slangMap
+    )
+  ) {
+
+    const regex =
+      new RegExp(
+        `\\b${slang}\\b`,
+        "gi"
+      );
+
+
+    if (
+      regex.test(
+        normalized
+      )
+    ) {
+
+      detectedSlang.push(
+        slang
+      );
+
+
+      normalized =
+        normalized.replace(
+          regex,
+          replacement
+        );
+
+    }
+
+  }
+
+
+  const shortMessages = [
+
+    "y",
+    "ya",
+    "ok",
+    "oke",
+    "iya",
+    "lanjut",
+    "next",
+    "terus",
+    "gmn",
+    "gmw"
+
+  ];
+
+
+  const isShortMessage =
+    shortMessages.includes(
+      text
+    ) ||
+    text.length <= 3;
+
+
+  return {
+
+    language:
+      /[a-zA-Z]/.test(text)
+        ? "id"
+        : "unknown",
+
+    originalMessage:
+      message,
+
+    normalizedMessage:
+      normalized,
+
+    slangDetected:
+      detectedSlang,
+
+    isShortMessage,
+
+    contextRequired:
+      isShortMessage &&
+      conversation.length > 0
+
+  };
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| CONTEXT
+|--------------------------------------------------------------------------
+*/
+
+function buildContext(
+  conversation = []
+) {
+
+  if (
+    !Array.isArray(
+      conversation
+    )
+  ) {
+
+    return [];
+
+  }
+
+
+  return conversation
+    .slice(-20)
+    .filter(
+      message =>
+        message &&
+        (
+          message.role ===
+            "user" ||
+          message.role ===
+            "assistant" ||
+          message.role ===
+            "system"
+        )
+    )
+    .map(
+      message => ({
+
+        role:
+          message.role,
+
+        content:
+          typeof message.content ===
+          "string"
+            ? message.content
+            : JSON.stringify(
+                message.content
+              )
+
+      })
+    );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| EXECUTE TOOLS
+|--------------------------------------------------------------------------
+*/
+
+async function executeTools(
+  toolNames,
+  message
+) {
+
+  const results = [];
+
+
+  for (
+    const toolName
+    of toolNames
+  ) {
+
+    const tool =
+      TOOLS[toolName];
+
+
+    if (!tool) {
+
+      results.push({
+
+        success:
+          false,
+
+        tool:
+          toolName,
+
+        error:
+          "Tool tidak ditemukan."
+
+      });
+
+      continue;
+
+    }
+
+
+    try {
+
+      const result =
+        await tool.execute({
+
+          query:
+            message,
+
+          message
+
+        });
+
+
+      results.push({
+
+        success:
+          true,
+
+        tool:
+          toolName,
+
+        result
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        `[TOOL ERROR] ${toolName}`,
+        error
+      );
+
+
+      results.push({
+
+        success:
+          false,
+
+        tool:
+          toolName,
+
+        error:
+          error.message
+
+      });
+
+    }
+
+  }
+
+
+  return results;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| FORMAT TOOL CONTEXT
+|--------------------------------------------------------------------------
+*/
+
+function formatToolContext(
+  results
+) {
+
+  if (
+    !results.length
+  ) {
+
+    return "";
+
+  }
+
+
+  return results
+    .map(
+      result => {
+
+        if (
+          !result.success
+        ) {
+
+          return `
+TOOL: ${result.tool}
+STATUS: ERROR
+ERROR: ${result.error}
+`;
+
+        }
+
+
+        return `
+TOOL: ${result.tool}
+STATUS: SUCCESS
+
+RESULT:
+${JSON.stringify(
+  result.result,
+  null,
+  2
+)}
+`;
+
+      }
+    )
+    .join("\n");
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| AI REQUEST
+|--------------------------------------------------------------------------
+*/
+
+async function generateAI({
+
+  message,
+
+  conversation,
+
+  language,
+
+  toolContext
+
+}) {
+
+  if (
+    !process.env.AI_API_KEY
+  ) {
+
+    throw new Error(
+      "AI_API_KEY belum dikonfigurasi."
+    );
+
+  }
+
+
+  const instructions = `
+
+${SYSTEM_PROMPT}
+
+LANGUAGE ANALYSIS:
+
+${JSON.stringify(
+  language,
+  null,
+  2
+)}
+
+EXTERNAL TOOL RESULTS:
+
+${toolContext || "Tidak ada."}
+
+`;
+
+  
+  const input = [
+
+    ...conversation,
+
+    {
+
+      role:
+        "user",
+
+      content:
+        message
+
+    }
+
+  ];
+
+
+  const response =
+    await fetch(
+      AI_API_URL,
+      {
+
+        method:
+          "POST",
+
+        headers: {
+
+          "Content-Type":
+            "application/json",
+
+          Authorization:
+            `Bearer ${process.env.AI_API_KEY}`
+
+        },
+
+        body:
+          JSON.stringify({
+
+            model:
+              AI_MODEL,
+
+            instructions,
+
+            input,
+
+            store:
+              false
+
+          })
+
+      }
+    );
+
+
+  if (
+    !response.ok
+  ) {
+
+    const error =
+      await response.text();
+
+
+    throw new Error(
+      `AI request gagal (${response.status}): ${error}`
+    );
+
+  }
+
+
+  const data =
+    await response.json();
+
+
+  return {
+
+    id:
+      data.id ||
+      null,
+
+    model:
+      data.model ||
+      AI_MODEL,
+
+    text:
+      data.output_text ||
+      "Senn tidak menerima jawaban.",
+
+    raw:
+      data
+
+  };
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| HOME
+|--------------------------------------------------------------------------
+*/
+
+app.get(
+  "/",
+  (req, res) => {
+
+    res.json({
+
+      success:
+        true,
+
+      name:
+        SENN.name,
+
+      version:
+        SENN.version,
+
+      status:
+        "online",
+
+      ai:
+        Boolean(
+          process.env.AI_API_KEY
+        ),
+
+      tools:
+        Object.keys(
+          TOOLS
+        ),
+
+      timestamp:
+        new Date().toISOString()
+
+    });
+
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| STATUS
+|--------------------------------------------------------------------------
+*/
+
+app.get(
+  "/api/status",
+  (req, res) => {
+
+    res.json({
+
+      success:
+        true,
+
+      system: {
+
+        server:
+          true,
+
+        ai:
+          Boolean(
+            process.env.AI_API_KEY
+          ),
+
+        language:
+          true,
+
+        context:
+          true,
+
+        router:
+          true,
+
+        tools:
+          Object.keys(
+            TOOLS
+          )
+
+      },
+
+      version:
+        SENN.version
+
+    });
+
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| CHAT
+|--------------------------------------------------------------------------
+*/
+
+app.post(
+  "/api/chat",
+
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const {
+
+        message,
+
+        conversation = []
+
+      } = req.body;
+
+
+      /*
+      ----------------------------------------------------------------------
+      | VALIDATION
+      ----------------------------------------------------------------------
+      */
+
+      if (
+        typeof message !==
+          "string" ||
+        !message.trim()
+      ) {
+
+        return res.status(
+          400
+        ).json({
+
+          success:
+            false,
+
+          error:
+            "Message tidak boleh kosong."
+
+        });
+
+      }
+
+
+      const cleanMessage =
+        message.trim();
+
+
+      /*
+      ----------------------------------------------------------------------
+      | LANGUAGE
+      ----------------------------------------------------------------------
+      */
+
+      const language =
+        analyzeLanguage(
+
+          cleanMessage,
+
+          conversation
+
+        );
+
+
+      /*
+      ----------------------------------------------------------------------
+      | ROUTER
+      ----------------------------------------------------------------------
+      */
+
+      const intent =
+        detectIntent(
+          cleanMessage
+        );
+
+
+      const detectedTools =
+        detectTools(
+          cleanMessage
+        );
+
+
+      /*
+      ----------------------------------------------------------------------
+      | CONTEXT
+      ----------------------------------------------------------------------
+      */
+
+      const context =
+        buildContext(
+          conversation
+        );
+
+
+      /*
+      ----------------------------------------------------------------------
       | TOOL EXECUT   updatedConversation,
 
           ai.text,
