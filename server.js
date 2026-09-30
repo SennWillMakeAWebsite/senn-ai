@@ -2,45 +2,11 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
-import {
-  routeRequest
-} from "./core/router.js";
-
-import {
-  analyzeLanguage
-} from "./core/language.js";
-
-import {
-  buildContextPackage,
-  appendUserMessage,
-  appendAssistantMessage,
-  getConversationStats
-} from "./core/context.js";
-
-import {
-  generateAIResponse,
-  isAIConfigured
-} from "./core/ai.js";
-
-import {
-  searchWeb
-} from "./tools/web.js";
-
-
 dotenv.config();
-
-
-/*
-|--------------------------------------------------------------------------
-| SERVER CONFIG
-|--------------------------------------------------------------------------
-*/
 
 const app = express();
 
-const PORT =
-  process.env.PORT || 3000;
-
+const PORT = process.env.PORT || 3000;
 
 const SENN = {
   name: "Senn AI",
@@ -65,23 +31,396 @@ app.use(
 
 /*
 |--------------------------------------------------------------------------
-| TOOL SYSTEM
+| AI CONFIG
+|--------------------------------------------------------------------------
+*/
+
+const AI_API_URL =
+  "https://api.openai.com/v1/responses";
+
+const AI_MODEL =
+  process.env.AI_MODEL ||
+  "gpt-5.6-luna";
+
+
+/*
+|--------------------------------------------------------------------------
+| SENN SYSTEM PROMPT
+|--------------------------------------------------------------------------
+*/
+
+const SYSTEM_PROMPT = `
+You are Senn AI 2.0.
+
+You are a general-purpose AI assistant.
+
+IMPORTANT:
+
+Understand Indonesian naturally.
+
+The user may use:
+- slang
+- abbreviations
+- typos
+- Indonesian-English mixtures
+- very short messages
+
+Examples:
+
+y
+ok
+oke
+gmn
+gmw
+ga
+gak
+yg
+udah
+udh
+blm
+bgt
+aja
+knp
+trs
+lanjut
+next
+
+Interpret these based on conversation context.
+
+Do not force formal language.
+
+CONVERSATION:
+
+Use previous messages when necessary.
+
+If the user says:
+
+"lanjut"
+"next"
+"terus?"
+"itu"
+"yang tadi"
+"gimana?"
+"bikin"
+
+use the previous conversation to understand what they mean.
+
+WEB:
+
+When web search results are provided, use them.
+
+Do not invent information.
+
+Do not claim that information is current unless
+current information was actually retrieved.
+
+If sources are available, preserve their meaning.
+
+GENERAL:
+
+Answer naturally.
+
+Be useful.
+
+Be direct.
+
+Do not unnecessarily repeat the user's question.
+`;
+
+
+/*
+|--------------------------------------------------------------------------
+| TOOL REGISTRY
 |--------------------------------------------------------------------------
 |
-| Semua tool yang tersedia untuk Senn
-| dikontrol dari sini.
+| Semua tool Senn sementara berada langsung
+| di server.js.
 |
+|--------------------------------------------------------------------------
 */
 
 const TOOLS = {
 
-  web_search: async ({
-    query
-  }) => {
+  /*
+  |--------------------------------------------------------------------------
+  | WEB SEARCH
+  |--------------------------------------------------------------------------
+  */
 
-    return await searchWeb({
-      query
-    });
+  web_search: {
+
+    description:
+      "Mencari informasi terkini dari internet.",
+
+    requiresInternet:
+      true,
+
+    execute:
+      async ({ query }) => {
+
+        if (
+          !query ||
+          typeof query !== "string"
+        ) {
+
+          throw new Error(
+            "Search query tidak valid."
+          );
+
+        }
+
+
+        if (
+          !process.env.AI_API_KEY
+        ) {
+
+          throw new Error(
+            "AI_API_KEY belum dikonfigurasi."
+          );
+
+        }
+
+
+        const response =
+          await fetch(
+            AI_API_URL,
+            {
+
+              method:
+                "POST",
+
+              headers: {
+
+                "Content-Type":
+                  "application/json",
+
+                Authorization:
+                  `Bearer ${process.env.AI_API_KEY}`
+
+              },
+
+              body:
+                JSON.stringify({
+
+                  model:
+                    AI_MODEL,
+
+                  tools: [
+
+                    {
+                      type:
+                        "web_search"
+                    }
+
+                  ],
+
+                  input:
+                    query,
+
+                  store:
+                    false
+
+                })
+
+            }
+          );
+
+
+        if (
+          !response.ok
+        ) {
+
+          const errorText =
+            await response.text();
+
+          throw new Error(
+            `Web search gagal (${response.status}): ${errorText}`
+          );
+
+        }
+
+
+        const data =
+          await response.json();
+
+
+        return {
+
+          answer:
+            data.output_text ||
+            "",
+
+          sources:
+            extractSources(data),
+
+          responseId:
+            data.id ||
+            null
+
+        };
+
+      }
+
+  },
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | CALCULATOR
+  |--------------------------------------------------------------------------
+  */
+
+  calculator: {
+
+    description:
+      "Menghitung operasi matematika.",
+
+    requiresInternet:
+      false,
+
+    execute:
+      async ({ query }) => {
+
+        if (
+          !query ||
+          typeof query !== "string"
+        ) {
+
+          throw new Error(
+            "Ekspresi matematika tidak valid."
+          );
+
+        }
+
+
+        const expression =
+          query
+            .replace(
+              /[^0-9+\-*/().%\s]/g,
+              ""
+            )
+            .trim();
+
+
+        if (!expression) {
+
+          throw new Error(
+            "Tidak ditemukan angka atau operasi."
+          );
+
+        }
+
+
+        try {
+
+          const result =
+            Function(
+              `"use strict"; return (${expression})`
+            )();
+
+
+          if (
+            typeof result !== "number" ||
+            !Number.isFinite(result)
+          ) {
+
+            throw new Error(
+              "Hasil tidak valid."
+            );
+
+          }
+
+
+          return {
+
+            expression,
+
+            result
+
+          };
+
+        } catch {
+
+          throw new Error(
+            "Ekspresi matematika tidak dapat dihitung."
+          );
+
+        }
+
+      }
+
+  },
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | TIME
+  |--------------------------------------------------------------------------
+  */
+
+  time: {
+
+    description:
+      "Mendapatkan waktu saat ini.",
+
+    requiresInternet:
+      false,
+
+    execute:
+      async () => {
+
+        const now =
+          new Date();
+
+        return {
+
+          iso:
+            now.toISOString(),
+
+          utc:
+            now.toUTCString(),
+
+          timestamp:
+            now.getTime()
+
+        };
+
+      }
+
+  },
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | WEATHER
+  |--------------------------------------------------------------------------
+  */
+
+  weather: {
+
+    description:
+      "Mendapatkan informasi cuaca.",
+
+    requiresInternet:
+      true,
+
+    execute:
+      async ({ query }) => {
+
+        return {
+
+          status:
+            "not_connected",
+
+          location:
+            query || null,
+
+          message:
+            "Weather provider belum dihubungkan."
+
+        };
+
+      }
 
   }
 
@@ -90,176 +429,488 @@ const TOOLS = {
 
 /*
 |--------------------------------------------------------------------------
-| TOOL CHECKER
+| WEB SOURCE EXTRACTION
 |--------------------------------------------------------------------------
 */
 
-function hasTool(toolName) {
+function extractSources(data) {
 
-  return Boolean(
-    TOOLS[toolName]
-  );
+  const sources = [];
 
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| TOOL EXECUTOR
-|--------------------------------------------------------------------------
-|
-| Executor sekarang langsung berada
-| di server.js.
-|
-*/
-
-async function executeTool(
-  toolName,
-  input = {}
-) {
-
-  if (
-    !hasTool(toolName)
-  ) {
-
-    return {
-
-      success: false,
-
-      tool:
-        toolName,
-
-      error:
-        `Tool "${toolName}" tidak tersedia.`
-
-    };
-
-  }
-
-
-  try {
-
-    const result =
-      await TOOLS[toolName](
-        input
-      );
-
-
-    return {
-
-      success: true,
-
-      tool:
-        toolName,
-
-      result
-
-    };
-
-  } catch (error) {
-
-    console.error(
-      `[SENN TOOL ERROR] ${toolName}`,
-      error
-    );
-
-
-    return {
-
-      success: false,
-
-      tool:
-        toolName,
-
-      error:
-        error.message
-
-    };
-
-  }
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| EXECUTE TOOL PLAN
-|--------------------------------------------------------------------------
-*/
-
-async function executeToolPlan({
-
-  execution,
-
-  message
-
-}) {
-
-  if (
-    !execution ||
-    !Array.isArray(
-      execution.tools
-    )
-  ) {
-
-    return {
-
-      success: true,
-
-      executed: [],
-
-      results: []
-
-    };
-
-  }
-
-
-  const results = [];
+  const output =
+    Array.isArray(data?.output)
+      ? data.output
+      : [];
 
 
   for (
-    const toolName
-      of execution.tools
+    const item of output
   ) {
 
-    const result =
-      await executeTool(
+    if (
+      item?.type !== "message"
+    ) {
 
-        toolName,
+      continue;
 
-        {
-          query:
-            message,
+    }
 
-          message
+
+    if (
+      !Array.isArray(
+        item.content
+      )
+    ) {
+
+      continue;
+
+    }
+
+
+    for (
+      const content
+      of item.content
+    ) {
+
+      const annotations =
+        Array.isArray(
+          content?.annotations
+        )
+          ? content.annotations
+          : [];
+
+
+      for (
+        const annotation
+        of annotations
+      ) {
+
+        if (
+          annotation?.type ===
+          "url_citation"
+        ) {
+
+          sources.push({
+
+            title:
+              annotation.title ||
+              "Web Source",
+
+            url:
+              annotation.url
+
+          });
+
         }
 
-      );
+      }
+
+    }
+
+  }
 
 
-    results.push(
-      result
+  return [
+    ...new Map(
+
+      sources
+        .filter(
+          source =>
+            source.url
+        )
+        .map(
+          source => [
+            source.url,
+            source
+          ]
+        )
+
+    ).values()
+  ];
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| TOOL DETECTION
+|--------------------------------------------------------------------------
+*/
+
+function detectTools(message) {
+
+  const text =
+    message
+      .toLowerCase()
+      .trim();
+
+
+  const tools = [];
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | WEB
+  |--------------------------------------------------------------------------
+  */
+
+  const webKeywords = [
+
+    "berita",
+    "terbaru",
+    "terkini",
+    "hari ini",
+    "sekarang",
+    "update",
+    "harga",
+    "jadwal",
+    "cari",
+    "search",
+    "google",
+    "internet",
+    "siapa",
+    "kapan",
+    "dimana",
+    "di mana"
+
+  ];
+
+
+  if (
+    webKeywords.some(
+      keyword =>
+        text.includes(keyword)
+    )
+  ) {
+
+    tools.push(
+      "web_search"
     );
 
   }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | CALCULATOR
+  |--------------------------------------------------------------------------
+  */
+
+  const calculatorKeywords = [
+
+    "hitung",
+    "kalkulasi",
+    "calculate",
+    "berapa hasil"
+
+  ];
+
+
+  const containsMath =
+    /[0-9]+\s*[\+\-\*\/]\s*[0-9]+/
+      .test(text);
+
+
+  if (
+    calculatorKeywords.some(
+      keyword =>
+        text.includes(keyword)
+    ) ||
+    containsMath
+  ) {
+
+    tools.push(
+      "calculator"
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | TIME
+  |--------------------------------------------------------------------------
+  */
+
+  const timeKeywords = [
+
+    "jam berapa",
+    "waktu sekarang",
+    "sekarang jam"
+
+  ];
+
+
+  if (
+    timeKeywords.some(
+      keyword =>
+        text.includes(keyword)
+    )
+  ) {
+
+    tools.push(
+      "time"
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | WEATHER
+  |--------------------------------------------------------------------------
+  */
+
+  const weatherKeywords = [
+
+    "cuaca",
+    "hujan",
+    "suhu",
+    "weather"
+
+  ];
+
+
+  if (
+    weatherKeywords.some(
+      keyword =>
+        text.includes(keyword)
+    )
+  ) {
+
+    tools.push(
+      "weather"
+    );
+
+  }
+
+
+  return [
+    ...new Set(tools)
+  ];
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| INTENT DETECTION
+|--------------------------------------------------------------------------
+*/
+
+function detectIntent(message) {
+
+  const text =
+    message
+      .toLowerCase()
+      .trim();
+
+
+  if (!text) {
+
+    return "empty";
+
+  }
+
+
+  if (
+    text.includes("?") ||
+    /^(apa|kenapa|bagaimana|gimana|siapa|kapan|dimana|di mana)\b/
+      .test(text)
+  ) {
+
+    return "question";
+
+  }
+
+
+  if (
+    /^(buat|bikin|buatkan|bikinin)\b/
+      .test(text)
+  ) {
+
+    return "creation";
+
+  }
+
+
+  if (
+    text.includes("error") ||
+    text.includes("bug") ||
+    text.includes("rusak") ||
+    text.includes("gak jalan") ||
+    text.includes("ga jalan")
+  ) {
+
+    return "debugging";
+
+  }
+
+
+  if (
+    text.includes("jelasin") ||
+    text.includes("jelaskan") ||
+    text.includes("explain")
+  ) {
+
+    return "explanation";
+
+  }
+
+
+  return "conversation";
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| LANGUAGE / SHORT MESSAGE ANALYSIS
+|--------------------------------------------------------------------------
+*/
+
+function analyzeLanguage(
+  message,
+  conversation = []
+) {
+
+  const text =
+    message
+      .toLowerCase()
+      .trim();
+
+
+  const slangMap = {
+
+    "gmn":
+      "gimana",
+
+    "gmw":
+      "nggak mau",
+
+    "ga":
+      "tidak",
+
+    "gak":
+      "tidak",
+
+    "yg":
+      "yang",
+
+    "udh":
+      "sudah",
+
+    "udah":
+      "sudah",
+
+    "blm":
+      "belum",
+
+    "bgt":
+      "banget",
+
+    "knp":
+      "kenapa",
+
+    "trs":
+      "terus",
+
+    "aja":
+      "saja"
+
+  };
+
+
+  let normalized =
+    text;
+
+
+  const detectedSlang = [];
+
+
+  for (
+    const [
+      slang,
+      replacement
+    ]
+    of Object.entries(
+      slangMap
+    )
+  ) {
+
+    const regex =
+      new RegExp(
+        `\\b${slang}\\b`,
+        "gi"
+      );
+
+
+    if (
+      regex.test(
+        normalized
+      )
+    ) {
+
+      detectedSlang.push(
+        slang
+      );
+
+
+      normalized =
+        normalized.replace(
+          regex,
+          replacement
+        );
+
+    }
+
+  }
+
+
+  const shortMessages = [
+
+    "y",
+    "ya",
+    "ok",
+    "oke",
+    "iya",
+    "lanjut",
+    "next",
+    "terus",
+    "gmn",
+    "gmw"
+
+  ];
+
+
+  const isShortMessage =
+    shortMessages.includes(
+      text
+    ) ||
+    text.length <= 3;
 
 
   return {
 
-    success:
-      results.every(
-        (item) =>
-          item.success
-      ),
+    language:
+      /[a-zA-Z]/.test(text)
+        ? "id"
+        : "unknown",
 
-    executed:
-      results.map(
-        (item) =>
-          item.tool
-      ),
+    originalMessage:
+      message,
 
-    results
+    normalizedMessage:
+      normalized,
+
+    slangDetected:
+      detectedSlang,
+
+    isShortMessage,
+
+    contextRequired:
+      isShortMessage &&
+      conversation.length > 0
 
   };
 
@@ -268,17 +919,170 @@ async function executeToolPlan({
 
 /*
 |--------------------------------------------------------------------------
-| FORMAT TOOL RESULTS
+| CONTEXT
 |--------------------------------------------------------------------------
 */
 
-function formatToolResults(
-  results = []
+function buildContext(
+  conversation = []
 ) {
 
   if (
-    !Array.isArray(results) ||
-    results.length === 0
+    !Array.isArray(
+      conversation
+    )
+  ) {
+
+    return [];
+
+  }
+
+
+  return conversation
+    .slice(-20)
+    .filter(
+      message =>
+        message &&
+        (
+          message.role ===
+            "user" ||
+          message.role ===
+            "assistant" ||
+          message.role ===
+            "system"
+        )
+    )
+    .map(
+      message => ({
+
+        role:
+          message.role,
+
+        content:
+          typeof message.content ===
+          "string"
+            ? message.content
+            : JSON.stringify(
+                message.content
+              )
+
+      })
+    );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| EXECUTE TOOLS
+|--------------------------------------------------------------------------
+*/
+
+async function executeTools(
+  toolNames,
+  message
+) {
+
+  const results = [];
+
+
+  for (
+    const toolName
+    of toolNames
+  ) {
+
+    const tool =
+      TOOLS[toolName];
+
+
+    if (!tool) {
+
+      results.push({
+
+        success:
+          false,
+
+        tool:
+          toolName,
+
+        error:
+          "Tool tidak ditemukan."
+
+      });
+
+      continue;
+
+    }
+
+
+    try {
+
+      const result =
+        await tool.execute({
+
+          query:
+            message,
+
+          message
+
+        });
+
+
+      results.push({
+
+        success:
+          true,
+
+        tool:
+          toolName,
+
+        result
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        `[TOOL ERROR] ${toolName}`,
+        error
+      );
+
+
+      results.push({
+
+        success:
+          false,
+
+        tool:
+          toolName,
+
+        error:
+          error.message
+
+      });
+
+    }
+
+  }
+
+
+  return results;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| FORMAT TOOL CONTEXT
+|--------------------------------------------------------------------------
+*/
+
+function formatToolContext(
+  results
+) {
+
+  if (
+    !results.length
   ) {
 
     return "";
@@ -288,35 +1092,179 @@ function formatToolResults(
 
   return results
     .map(
-      (item) => {
+      result => {
 
         if (
-          !item.success
+          !result.success
         ) {
 
-          return [
-            `TOOL: ${item.tool}`,
-            `STATUS: ERROR`,
-            `ERROR: ${item.error}`
-          ].join("\n");
+          return `
+TOOL: ${result.tool}
+STATUS: ERROR
+ERROR: ${result.error}
+`;
 
         }
 
 
-        return [
-          `TOOL: ${item.tool}`,
-          `STATUS: SUCCESS`,
-          "RESULT:",
-          JSON.stringify(
-            item.result,
-            null,
-            2
-          )
-        ].join("\n");
+        return `
+TOOL: ${result.tool}
+STATUS: SUCCESS
+
+RESULT:
+${JSON.stringify(
+  result.result,
+  null,
+  2
+)}
+`;
 
       }
     )
-    .join("\n\n");
+    .join("\n");
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| AI REQUEST
+|--------------------------------------------------------------------------
+*/
+
+async function generateAI({
+
+  message,
+
+  conversation,
+
+  language,
+
+  toolContext
+
+}) {
+
+  if (
+    !process.env.AI_API_KEY
+  ) {
+
+    throw new Error(
+      "AI_API_KEY belum dikonfigurasi."
+    );
+
+  }
+
+
+  const instructions = `
+
+${SYSTEM_PROMPT}
+
+LANGUAGE ANALYSIS:
+
+${JSON.stringify(
+  language,
+  null,
+  2
+)}
+
+EXTERNAL TOOL RESULTS:
+
+${toolContext || "Tidak ada."}
+
+`;
+
+  
+  const input = [
+
+    ...conversation,
+
+    {
+
+      role:
+        "user",
+
+      content:
+        message
+
+    }
+
+  ];
+
+
+  const response =
+    await fetch(
+      AI_API_URL,
+      {
+
+        method:
+          "POST",
+
+        headers: {
+
+          "Content-Type":
+            "application/json",
+
+          Authorization:
+            `Bearer ${process.env.AI_API_KEY}`
+
+        },
+
+        body:
+          JSON.stringify({
+
+            model:
+              AI_MODEL,
+
+            instructions,
+
+            input,
+
+            store:
+              false
+
+          })
+
+      }
+    );
+
+
+  if (
+    !response.ok
+  ) {
+
+    const error =
+      await response.text();
+
+
+    throw new Error(
+      `AI request gagal (${response.status}): ${error}`
+    );
+
+  }
+
+
+  const data =
+    await response.json();
+
+
+  return {
+
+    id:
+      data.id ||
+      null,
+
+    model:
+      data.model ||
+      AI_MODEL,
+
+    text:
+      data.output_text ||
+      "Senn tidak menerima jawaban.",
+
+    raw:
+      data
+
+  };
 
 }
 
@@ -333,7 +1281,8 @@ app.get(
 
     res.json({
 
-      success: true,
+      success:
+        true,
 
       name:
         SENN.name,
@@ -344,11 +1293,15 @@ app.get(
       status:
         "online",
 
-      aiConfigured:
-        isAIConfigured(),
+      ai:
+        Boolean(
+          process.env.AI_API_KEY
+        ),
 
-      availableTools:
-        Object.keys(TOOLS),
+      tools:
+        Object.keys(
+          TOOLS
+        ),
 
       timestamp:
         new Date().toISOString()
@@ -361,7 +1314,7 @@ app.get(
 
 /*
 |--------------------------------------------------------------------------
-| SYSTEM STATUS
+| STATUS
 |--------------------------------------------------------------------------
 */
 
@@ -371,7 +1324,8 @@ app.get(
 
     res.json({
 
-      success: true,
+      success:
+        true,
 
       system: {
 
@@ -379,7 +1333,9 @@ app.get(
           true,
 
         ai:
-          isAIConfigured(),
+          Boolean(
+            process.env.AI_API_KEY
+          ),
 
         language:
           true,
@@ -391,15 +1347,14 @@ app.get(
           true,
 
         tools:
-          Object.keys(TOOLS)
+          Object.keys(
+            TOOLS
+          )
 
       },
 
       version:
-        SENN.version,
-
-      timestamp:
-        new Date().toISOString()
+        SENN.version
 
     });
 
@@ -416,7 +1371,10 @@ app.get(
 app.post(
   "/api/chat",
 
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
@@ -424,9 +1382,7 @@ app.post(
 
         message,
 
-        conversation = [],
-
-        settings = {}
+        conversation = []
 
       } = req.body;
 
@@ -438,16 +1394,20 @@ app.post(
       */
 
       if (
-        typeof message !== "string" ||
+        typeof message !==
+          "string" ||
         !message.trim()
       ) {
 
-        return res.status(400).json({
+        return res.status(
+          400
+        ).json({
 
-          success: false,
+          success:
+            false,
 
           error:
-            "Message cannot be empty."
+            "Message tidak boleh kosong."
 
         });
 
@@ -460,19 +1420,18 @@ app.post(
 
       /*
       ----------------------------------------------------------------------
-      | LANGUAGE ANALYSIS
+      | LANGUAGE
       ----------------------------------------------------------------------
       */
 
       const language =
-        analyzeLanguage({
+        analyzeLanguage(
 
-          message:
-            cleanMessage,
+          cleanMessage,
 
           conversation
 
-        });
+        );
 
 
       /*
@@ -481,17 +1440,16 @@ app.post(
       ----------------------------------------------------------------------
       */
 
-      const routing =
-        routeRequest({
+      const intent =
+        detectIntent(
+          cleanMessage
+        );
 
-          message:
-            language.normalizedMessage,
 
-          conversation,
-
-          settings
-
-        });
+      const detectedTools =
+        detectTools(
+          cleanMessage
+        );
 
 
       /*
@@ -501,179 +1459,14 @@ app.post(
       */
 
       const context =
-        buildContextPackage({
-
-          conversation,
-
-          languageAnalysis:
-            language,
-
-          userMessage:
-            cleanMessage
-
-        });
-
-
-      /*
-      ----------------------------------------------------------------------
-      | AI CONFIG CHECK
-      ----------------------------------------------------------------------
-      */
-
-      if (
-        !isAIConfigured()
-      ) {
-
-        return res.status(503).json({
-
-          success: false,
-
-          error:
-            "Senn AI belum dikonfigurasi.",
-
-          setup: {
-
-            required:
-              "AI_API_KEY",
-
-            message:
-              "Tambahkan API key terlebih dahulu."
-
-          },
-
-          analysis: {
-
-            language,
-
-            routing,
-
-            context
-
-          }
-
-        });
-
-      }
-
-
-      /*
-      ----------------------------------------------------------------------
-      | TOOL EXECUTION
-      ----------------------------------------------------------------------
-      */
-
-      let toolExecution = {
-
-        success: true,
-
-        executed: [],
-
-        results: []
-
-      };
-
-
-      if (
-        routing.requiresTool
-      ) {
-
-        toolExecution =
-          await executeToolPlan({
-
-            execution:
-              routing.execution,
-
-            message:
-              cleanMessage
-
-          });
-
-      }
-
-
-      /*
-      ----------------------------------------------------------------------
-      | TOOL CONTEXT
-      ----------------------------------------------------------------------
-      */
-
-      const toolContext =
-        formatToolResults(
-
-          toolExecution.results
-
+        buildContext(
+          conversation
         );
 
 
       /*
       ----------------------------------------------------------------------
-      | ADD USER MESSAGE
-      ----------------------------------------------------------------------
-      */
-
-      const updatedConversation =
-        appendUserMessage(
-
-          conversation,
-
-          cleanMessage,
-
-          {
-
-            language:
-              language.language,
-
-            intent:
-              routing.intent,
-
-            tools:
-              routing.tools
-
-          }
-
-        );
-
-
-      /*
-      ----------------------------------------------------------------------
-      | AI CORE
-      ----------------------------------------------------------------------
-      */
-
-      const ai =
-        await generateAIResponse({
-
-          message:
-            cleanMessage,
-
-          conversation:
-            context.conversation,
-
-          languageAnalysis:
-            language,
-
-          contextPackage:
-            context,
-
-          settings,
-
-          tools: [],
-
-          toolContext
-
-        });
-
-
-      /*
-      ----------------------------------------------------------------------
-      | ADD ASSISTANT MESSAGE
-      ----------------------------------------------------------------------
-      */
-
-      const finalConversation =
-        appendAssistantMessage(
-
-          updatedConversation,
+      | TOOL EXECUT   updatedConversation,
 
           ai.text,
 
