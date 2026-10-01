@@ -1,21 +1,34 @@
+/*
+|--------------------------------------------------------------------------
+| SENN AI V2
+| server.js
+|--------------------------------------------------------------------------
+*/
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
 
 dotenv.config();
+
+
+/*
+|--------------------------------------------------------------------------
+| APP
+|--------------------------------------------------------------------------
+*/
 
 const app = express();
 
 const PORT =
-  process.env.PORT || 3000;
+  Number(process.env.PORT) || 3000;
 
-const __filename =
-  fileURLToPath(import.meta.url);
+const AI_API_URL =
+  "https://api.openai.com/v1/responses";
 
-const __dirname =
-  path.dirname(__filename);
+const AI_MODEL =
+  process.env.AI_MODEL ||
+  "gpt-5.6-luna";
 
 
 /*
@@ -25,26 +38,14 @@ const __dirname =
 */
 
 const SENN = {
-
-  name:
-    "Senn AI",
-
-  version:
-    "2.0.0",
-
-  description:
-    "Built to understand.",
-
-  model:
-    process.env.AI_MODEL ||
-    "gpt-5.6-luna"
-
+  name: "Senn AI",
+  version: "2.0.0"
 };
 
 
 /*
 |--------------------------------------------------------------------------
-| EXPRESS
+| MIDDLEWARE
 |--------------------------------------------------------------------------
 */
 
@@ -52,44 +53,30 @@ app.use(
   cors()
 );
 
+
 app.use(
   express.json({
-    limit:
-      "10mb"
+    limit: "10mb"
   })
 );
 
 
 /*
 |--------------------------------------------------------------------------
-| STATIC WEBSITE
+| STATIC FILES
+|--------------------------------------------------------------------------
+|
+| index.html
+| index.js
+| style/css
+| dan file frontend lainnya
+| akan dilayani dari folder project.
 |--------------------------------------------------------------------------
 */
 
 app.use(
-  express.static(
-    __dirname
-  )
+  express.static(".")
 );
-
-
-/*
-|--------------------------------------------------------------------------
-| OPENAI
-|--------------------------------------------------------------------------
-*/
-
-const AI_API_URL =
-  "https://api.openai.com/v1/responses";
-
-
-function hasAIKey() {
-
-  return Boolean(
-    process.env.AI_API_KEY
-  );
-
-}
 
 
 /*
@@ -101,652 +88,917 @@ function hasAIKey() {
 const SYSTEM_PROMPT = `
 You are Senn AI 2.0.
 
-Identity:
-- Name: Senn AI
-- Purpose: intelligent general-purpose AI assistant
-- Personality: natural, concise, useful, context-aware
-- Tagline: Built to understand.
+You are a modern general-purpose AI assistant.
 
-CORE BEHAVIOR:
+Understand Indonesian naturally.
 
-Understand what the user means, not only the exact words.
-
-Users may use:
-- Indonesian
-- English
-- Indonesian-English mixtures
-- slang
+The user may use:
+- Indonesian slang
 - abbreviations
 - typos
-- incomplete sentences
+- Indonesian-English mixtures
 - very short messages
+- casual language
 
 Examples:
-y
-ya
-ok
-oke
-gmn
-gmw
-ga
-gak
+
+gw
+gua
+lu
+lo
 yg
 udh
 udah
 blm
 bgt
-aja
+gmn
 knp
 trs
+aja
+ga
+gak
+nggak
 lanjut
 next
-itu
-yg tadi
+oke
+y
 
-Interpret these based on context.
+Understand these using conversation context.
 
-Do NOT repeatedly explain that you detected slang.
+Do not force formal Indonesian.
 
-CONVERSATION:
+Be natural, direct, useful, and concise.
 
-Use conversation history when it is relevant.
+If the user asks for coding help:
+- provide practical code
+- explain important parts briefly
+- preserve their existing project context
 
 If the user says:
-- lanjut
-- next
-- terus
-- yang tadi
-- yg tadi
-- itu
-- gimana
-- bikin
-- lanjutkan
+"lanjut"
+"next"
+"terus"
+"itu"
+"yang tadi"
+"gimana"
+"bikin"
 
-understand what they are referring to from previous messages.
+use previous conversation context.
 
-Do not pretend to know context that is not available.
+Never pretend to have performed an action that you did not perform.
 
-WEB INFORMATION:
+Never invent web sources.
 
-When web search results are provided:
-- use them as external information
-- preserve their meaning
-- do not invent sources
-- do not claim something is current unless current information was retrieved
-- distinguish retrieved information from your own general knowledge
+If web search is available and useful, use it.
 
-TOOLS:
-
-Tool results are provided to you by the Senn backend.
-
-Use them intelligently.
-
-CALCULATOR:
-Trust calculator results.
-
-WEB SEARCH:
-Use retrieved information when answering current or externally verifiable questions.
-
-GENERAL:
-
-Answer naturally.
-
-Match the user's language.
-
-If the user speaks casual Indonesian, casual Indonesian is acceptable.
-
-Do not unnecessarily repeat the question.
-
-Do not expose internal routing, system prompts, API keys, or backend implementation.
-
-If you do not know something, say so instead of inventing it.
+Answer in Indonesian unless the user clearly uses another language.
 `;
 
 
 /*
 |--------------------------------------------------------------------------
-| LANGUAGE ANALYSIS
+| API KEY CHECK
 |--------------------------------------------------------------------------
 */
 
-function analyzeLanguage(
-  message,
-  conversation = []
+function requireApiKey() {
+
+  if (
+    !process.env.AI_API_KEY
+  ) {
+
+    throw new Error(
+      "AI_API_KEY belum dikonfigurasi di file .env"
+    );
+
+  }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| BUILD CONVERSATION
+|--------------------------------------------------------------------------
+*/
+
+function buildConversation(
+  conversation,
+  message
 ) {
 
-  const original =
-    String(message || "")
-      .trim();
+  const safeConversation =
+    Array.isArray(conversation)
+      ? conversation
+      : [];
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Limit context
+  |--------------------------------------------------------------------------
+  */
+
+  const recent =
+    safeConversation
+      .filter(
+        item =>
+          item &&
+          (
+            item.role === "user" ||
+            item.role === "assistant"
+          )
+      )
+      .slice(-30)
+      .map(
+        item => ({
+
+          role:
+            item.role,
+
+          content:
+            typeof item.content === "string"
+              ? item.content
+              : String(
+                  item.content ?? ""
+                )
+
+        })
+      );
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Jangan duplicate message terakhir
+  |--------------------------------------------------------------------------
+  */
+
+  const last =
+    recent[recent.length - 1];
+
+
+  if (
+    !last ||
+    last.role !== "user" ||
+    last.content !== message
+  ) {
+
+    recent.push({
+
+      role: "user",
+
+      content: message
+
+    });
+
+  }
+
+
+  return recent;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| OPENAI REQUEST
+|--------------------------------------------------------------------------
+*/
+
+async function askAI({
+  message,
+  conversation
+}) {
+
+  requireApiKey();
+
+
+  const input =
+    buildConversation(
+      conversation,
+      message
+    );
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | RESPONSE API
+  |--------------------------------------------------------------------------
+  */
+
+  const response =
+    await fetch(
+      AI_API_URL,
+      {
+
+        method: "POST",
+
+        headers: {
+
+          "Content-Type":
+            "application/json",
+
+          Authorization:
+            `Bearer ${process.env.AI_API_KEY}`
+
+        },
+
+        body:
+          JSON.stringify({
+
+            model:
+              AI_MODEL,
+
+            instructions:
+              SYSTEM_PROMPT,
+
+            input,
+
+            store:
+              false
+
+          })
+
+      }
+    );
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | READ RESPONSE
+  |--------------------------------------------------------------------------
+  */
+
+  const raw =
+    await response.text();
+
+
+  let data = {};
+
+  try {
+
+    data =
+      raw
+        ? JSON.parse(raw)
+        : {};
+
+  } catch {
+
+    throw new Error(
+      "OpenAI mengirim response yang bukan JSON."
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | API ERROR
+  |--------------------------------------------------------------------------
+  */
+
+  if (!response.ok) {
+
+    console.error(
+      "[OPENAI ERROR]",
+      data
+    );
+
+
+    const apiMessage =
+      data?.error?.message ||
+      data?.message ||
+      `OpenAI API error ${response.status}`;
+
+
+    throw new Error(
+      apiMessage
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | TEXT
+  |--------------------------------------------------------------------------
+  */
 
   const text =
-    original
-      .toLowerCase();
+    extractOutputText(
+      data
+    );
 
 
-  const slangMap = {
+  if (!text) {
 
-    gmn:
-      "gimana",
+    throw new Error(
+      "AI berhasil dipanggil tetapi tidak mengembalikan teks."
+    );
 
-    gmna:
-      "gimana",
+  }
 
-    gmn:
-      "gimana",
 
-    gmw:
-      "tidak mau",
+  return {
 
-    ga:
-      "tidak",
+    text,
 
-    gak:
-      "tidak",
+    responseId:
+      data.id ||
+      null,
 
-    nggak:
-      "tidak",
-
-    ngga:
-      "tidak",
-
-    yg:
-      "yang",
-
-    udh:
-      "sudah",
-
-    udah:
-      "sudah",
-
-    blm:
-      "belum",
-
-    bgt:
-      "banget",
-
-    knp:
-      "kenapa",
-
-    knapa:
-      "kenapa",
-
-    trs:
-      "terus",
-
-    trus:
-      "terus",
-
-    aja:
-      "saja",
-
-    dgn:
-      "dengan",
-
-    dr:
-      "dari",
-
-    jg:
-      "juga",
-
-    gw:
-      "saya",
-
-    gua:
-      "saya",
-
-    lu:
-      "kamu",
-
-    lo:
-      "kamu",
-
-    kyk:
-      "seperti",
-
-    kek:
-      "seperti"
+    model:
+      data.model ||
+      AI_MODEL
 
   };
 
+}
 
-  let normalized =
-    text;
 
-  const detectedSlang =
-    [];
+/*
+|--------------------------------------------------------------------------
+| EXTRACT OUTPUT TEXT
+|--------------------------------------------------------------------------
+*/
+
+function extractOutputText(
+  data
+) {
+
+  /*
+  |--------------------------------------------------------------------------
+  | Responses API biasanya menyediakan output_text
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    typeof data?.output_text === "string" &&
+    data.output_text.trim()
+  ) {
+
+    return data.output_text.trim();
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Fallback parser
+  |--------------------------------------------------------------------------
+  */
+
+  const output =
+    Array.isArray(data?.output)
+      ? data.output
+      : [];
+
+
+  const parts = [];
 
 
   for (
-    const [
-      slang,
-      replacement
-    ]
-    of Object.entries(
-      slangMap
-    )
+    const item of output
   ) {
 
-    const regex =
-      new RegExp(
-        `\\b${slang}\\b`,
-        "gi"
-      );
-
-
     if (
-      regex.test(
-        normalized
+      !Array.isArray(
+        item?.content
       )
     ) {
 
-      detectedSlang.push(
-        slang
-      );
+      continue;
 
-      normalized =
-        normalized.replace(
-          regex,
-          replacement
+    }
+
+
+    for (
+      const content
+      of item.content
+    ) {
+
+      if (
+        typeof content?.text === "string"
+      ) {
+
+        parts.push(
+          content.text
         );
+
+      }
 
     }
 
   }
 
 
-  const shortMessages = [
-
-    "y",
-    "ya",
-    "ok",
-    "oke",
-    "iya",
-    "lanjut",
-    "next",
-    "terus",
-    "itu",
-    "gmn"
-
-  ];
-
-
-  const isShort =
-    shortMessages.includes(
-      text
-    ) ||
-    original.length <= 4;
-
-
-  const contextAvailable =
-    Array.isArray(
-      conversation
-    ) &&
-    conversation.length > 0;
-
-
-  return {
-
-    original,
-
-    normalized,
-
-    detectedSlang,
-
-    isShort,
-
-    contextAvailable,
-
-    contextRequired:
-      isShort &&
-      contextAvailable
-
-  };
+  return parts
+    .join("\n")
+    .trim();
 
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| INTENT DETECTION
+| EXTRACT SOURCES
 |--------------------------------------------------------------------------
 */
 
-function detectIntent(
-  message
+function extractSources(
+  data
 ) {
 
-  const text =
-    String(message || "")
-      .toLowerCase()
-      .trim();
+  const sources = [];
 
 
-  if (!text) {
+  const output =
+    Array.isArray(data?.output)
+      ? data.output
+      : [];
 
-    return "empty";
 
-  }
-
-
-  if (
-    /^(lanjut|next|terus|itu|yg tadi|yang tadi)$/
-      .test(text)
+  for (
+    const item
+    of output
   ) {
 
-    return "continuation";
-
-  }
-
-
-  if (
-    /^(apa|apaan|kenapa|knp|bagaimana|gimana|siapa|kapan|dimana|di mana)\b/
-      .test(text)
-    ||
-    text.endsWith("?")
-  ) {
-
-    return "question";
-
-  }
-
-
-  if (
-    /^(buat|bikin|buatkan|bikinin)\b/
-      .test(text)
-  ) {
-
-    return "creation";
-
-  }
-
-
-  if (
-    /\b(error|bug|debug|rusak|gak jalan|ga jalan|tidak jalan)\b/
-      .test(text)
-  ) {
-
-    return "debugging";
-
-  }
-
-
-  if (
-    /\b(jelasin|jelaskan|explain|arti|maksud)\b/
-      .test(text)
-  ) {
-
-    return "explanation";
-
-  }
-
-
-  if (
-    /\b(bandingkan|bandingin|compare|perbedaan|beda)\b/
-      .test(text)
-  ) {
-
-    return "comparison";
-
-  }
-
-
-  return "conversation";
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| SMART ROUTER
-|--------------------------------------------------------------------------
-*/
-
-function smartRouter(
-  message,
-  conversation = [],
-  language = {}
-) {
-
-  const text =
-    String(message || "")
-      .toLowerCase()
-      .trim();
-
-
-  const route = {
-
-    primary:
-      "ai",
-
-    tools:
-      [],
-
-    reason:
-      "general_conversation",
-
-    confidence:
-      0.82
-
-  };
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | CONTEXTUAL MESSAGE
-  |--------------------------------------------------------------------------
-  */
-
-  const continuationWords = [
-
-    "lanjut",
-    "next",
-    "terus",
-    "itu",
-    "yg tadi",
-    "yang tadi",
-    "gimana",
-    "oke",
-    "ok",
-    "y"
-
-  ];
-
-
-  if (
-    language.contextRequired
-    ||
-    (
-      conversation.length > 0 &&
-      continuationWords.some(
-        word =>
-          text === word
+    if (
+      !Array.isArray(
+        item?.content
       )
-    )
-  ) {
+    ) {
 
-    return {
+      continue;
 
-      primary:
-        "ai",
+    }
 
-      tools:
-        [],
 
-      reason:
-        "conversation_context",
+    for (
+      const content
+      of item.content
+    ) {
 
-      confidence:
-        0.98,
+      const annotations =
+        Array.isArray(
+          content?.annotations
+        )
+          ? content.annotations
+          : [];
 
-      contextRequired:
-        true
 
-    };
+      for (
+        const annotation
+        of annotations
+      ) {
+
+        if (
+          annotation?.type ===
+          "url_citation"
+        ) {
+
+          sources.push({
+
+            title:
+              annotation.title ||
+              "Web Source",
+
+            url:
+              annotation.url
+
+          });
+
+        }
+
+      }
+
+    }
 
   }
 
 
   /*
   |--------------------------------------------------------------------------
-  | CALCULATOR
+  | Remove duplicates
   |--------------------------------------------------------------------------
   */
 
-  const mathExpression =
-    /(?:\d+(?:\.\d+)?)\s*(?:\+|-|\*|\/|%|\^)\s*(?:\d+(?:\.\d+)?)/;
+  return [
+    ...new Map(
 
+      sources
+        .filter(
+          source =>
+            source.url
+        )
+        .map(
+          source => [
+            source.url,
+            source
+          ]
+        )
 
-  const mathWords = [
-
-    "hitung",
-    "kalkulasi",
-    "calculate",
-    "berapa hasil"
-
+    ).values()
   ];
 
-
-  if (
-    mathExpression.test(text)
-    ||
-    mathWords.some(
-      word =>
-        text.includes(word)
-    )
-  ) {
-
-    return {
-
-      primary:
-        "calculator",
-
-      tools:
-        [
-          "calculator"
-        ],
-
-      reason:
-        "mathematical_calculation",
-
-      confidence:
-        0.99
-
-    };
-
-  }
+}
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | WEB SEARCH
-  |--------------------------------------------------------------------------
-  */
+/*
+|--------------------------------------------------------------------------
+| HOME
+|--------------------------------------------------------------------------
+*/
 
-  const searchWords = [
+app.get(
+  "/",
+  function (req, res) {
 
-    "cari",
-    "carikan",
-    "search",
-    "googling",
-    "internet",
-    "di internet",
-    "berita",
-    "berita terbaru",
-    "terbaru",
-    "terkini",
-    "update",
-    "harga",
-    "jadwal",
-    "rilis",
-    "release",
-    "sekarang",
-    "hari ini",
-    "saat ini",
-    "siapa sekarang",
-    "apa yang terjadi"
+    res.json({
 
-  ];
+      success:
+        true,
 
+      name:
+        SENN.name,
 
-  if (
-    searchWords.some(
-      word =>
-        text.includes(word)
-    )
-  ) {
+      version:
+        SENN.version,
 
-    return {
+      status:
+        "online",
 
-      primary:
-        "web_search",
+      ai:
+        Boolean(
+          process.env.AI_API_KEY
+        ),
 
-      tools:
-        [
-          "web_search"
-        ],
+      model:
+        AI_MODEL,
 
-      reason:
-        "external_current_information",
+      endpoints: {
 
-      confidence:
-        0.94
+        chat:
+          "/api/chat",
 
-    };
+        status:
+          "/api/status"
+
+      },
+
+      timestamp:
+        new Date().toISOString()
+
+    });
 
   }
+);
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | WEATHER
-  |--------------------------------------------------------------------------
-  */
+/*
+|--------------------------------------------------------------------------
+| STATUS
+|--------------------------------------------------------------------------
+*/
 
-  const weatherWords = [
+app.get(
+  "/api/status",
+  function (req, res) {
 
-    "cuaca",
-    "weather",
-    "hujan",
-    "suhu"
+    res.json({
 
-  ];
+      success:
+        true,
 
+      status:
+        "online",
 
-  if (
-    weatherWords.some(
-      word =>
-        text.includes(word)
-    )
-  ) {
+      system: {
 
-    return {
+        server:
+          true,
 
-      primary:
-        "weather",
+        ai:
+          Boolean(
+            process.env.AI_API_KEY
+          ),
 
-      tools:
-        [
-          "weather"
-        ],
+        chat:
+          true,
 
-      reason:
-        "weather_information",
+        context:
+          true
 
-      confidence:
-        0.95
+      },
 
-    };
+      senn: {
+
+        name:
+          SENN.name,
+
+        version:
+          SENN.version,
+
+        model:
+          AI_MODEL
+
+      },
+
+      timestamp:
+        new Date().toISOString()
+
+    });
 
   }
+);
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | TIME
-  |--------------------------------------------------------------------------
-  */
+/*
+|--------------------------------------------------------------------------
+| CHAT
+|--------------------------------------------------------------------------
+*/
 
-  const timeWords = [
+app.post(
+  "/api/chat",
+  async function (req, res) {
+
+    try {
+
+      /*
+      |--------------------------------------------------------------------------
+      | REQUEST
+      |--------------------------------------------------------------------------
+      */
+
+      const {
+        message,
+        conversation
+      } = req.body || {};
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | VALIDATION
+      |--------------------------------------------------------------------------
+      */
+
+      if (
+        typeof message !== "string"
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "message harus berupa string."
+
+          });
+
+      }
+
+
+      const cleanMessage =
+        message.trim();
+
+
+      if (!cleanMessage) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "Message tidak boleh kosong."
+
+          });
+
+      }
+
+
+      console.log(
+        `[SENN CHAT] ${cleanMessage}`
+      );
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | AI
+      |--------------------------------------------------------------------------
+      */
+
+      const result =
+        await askAI({
+
+          message:
+            cleanMessage,
+
+          conversation:
+            conversation
+
+        });
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | SOURCES
+      |--------------------------------------------------------------------------
+      */
+
+      /*
+      | askAI hanya mengembalikan data ringkas.
+      | Sources kosong untuk request normal.
+      |
+      | Web search akan kita aktifkan setelah
+      | chat dasar sudah benar-benar stabil.
+      */
+
+      const sources = [];
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | RESPONSE
+      |--------------------------------------------------------------------------
+      */
+
+      return res.json({
+
+        success:
+          true,
+
+        answer:
+          result.text,
+
+        text:
+          result.text,
+
+        responseId:
+          result.responseId,
+
+        model:
+          result.model,
+
+        sources,
+
+        timestamp:
+          new Date().toISOString()
+
+      });
+
+
+    } catch (error) {
+
+      console.error(
+        "[SENN CHAT ERROR]",
+        error
+      );
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | ERROR RESPONSE
+      |--------------------------------------------------------------------------
+      */
+
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            error?.message ||
+            "Senn mengalami kesalahan pada server."
+
+        });
+
+    }
+
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| 404 API
+|--------------------------------------------------------------------------
+*/
+
+app.use(
+  "/api",
+  function (req, res) {
+
+    res
+      .status(404)
+      .json({
+
+        success:
+          false,
+
+        error:
+          `API endpoint tidak ditemukan: ${req.method} ${req.originalUrl}`
+
+      });
+
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| GLOBAL ERROR
+|--------------------------------------------------------------------------
+*/
+
+app.use(
+  function (error, req, res, next) {
+
+    console.error(
+      "[SENN GLOBAL ERROR]",
+      error
+    );
+
+
+    if (
+      res.headersSent
+    ) {
+
+      return next(error);
+
+    }
+
+
+    res
+      .status(500)
+      .json({
+
+        success:
+          false,
+
+        error:
+          "Internal server error."
+
+      });
+
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| START SERVER
+|--------------------------------------------------------------------------
+*/
+
+app.listen(
+  PORT,
+  function () {
+
+    console.log("");
+    console.log(
+      "======================================"
+    );
+    console.log(
+      "        SENN AI V2 SERVER"
+    );
+    console.log(
+      "======================================"
+    );
+    console.log(
+      `Name    : ${SENN.name}`
+    );
+    console.log(
+      `Version : ${SENN.version}`
+    );
+    console.log(
+      `Model   : ${AI_MODEL}`
+    );
+    console.log(
+      `Port    : ${PORT}`
+    );
+    console.log(
+      `AI Key  : ${
+        process.env.AI_API_KEY
+          ? "CONNECTED"
+          : "MISSING"
+      }`
+    );
+    console.log(
+      "======================================"
+    );
+    console.log("");
+
+  }
+);  const timeWords = [
 
     "jam berapa",
     "waktu sekarang",
