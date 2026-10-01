@@ -7,9 +7,11 @@
 
 "use strict";
 
-/* ==========================================================================
-   CONFIG
-========================================================================== */
+/*
+|--------------------------------------------------------------------------
+| CONFIG
+|--------------------------------------------------------------------------
+*/
 
 const API = {
   chat: "/api/chat",
@@ -17,9 +19,15 @@ const API = {
 };
 
 const STORAGE = {
-  history: "senn_ai_history",
-  theme: "senn_ai_theme"
+  history: "senn_ai_history"
 };
+
+
+/*
+|--------------------------------------------------------------------------
+| STATE
+|--------------------------------------------------------------------------
+*/
 
 const state = {
   conversation: [],
@@ -30,9 +38,11 @@ const state = {
 };
 
 
-/* ==========================================================================
-   ELEMENTS
-========================================================================== */
+/*
+|--------------------------------------------------------------------------
+| DOM
+|--------------------------------------------------------------------------
+*/
 
 let chat;
 let chatInner;
@@ -48,40 +58,22 @@ let sidebar;
 let mobileMenu;
 
 
-/* ==========================================================================
-   INIT
-========================================================================== */
-
-document.addEventListener("DOMContentLoaded", init);
+/*
+|--------------------------------------------------------------------------
+| INIT
+|--------------------------------------------------------------------------
+*/
 
 function init() {
 
-  cacheElements();
+  /*
+  |--------------------------------------------------------------------------
+  | GET ELEMENTS
+  |--------------------------------------------------------------------------
+  */
 
-  loadHistory();
-
-  bindEvents();
-
-  checkServer();
-
-  autoResize();
-
-  updateSendButton();
-
-  if (input) {
-    input.focus();
-  }
-
-}
-
-
-/* ==========================================================================
-   CACHE ELEMENTS
-========================================================================== */
-
-function cacheElements() {
-
-  chat = document.getElementById("chat");
+  chat =
+    document.getElementById("chat");
 
   chatInner =
     document.getElementById("chatInner");
@@ -116,189 +108,348 @@ function cacheElements() {
   mobileMenu =
     document.getElementById("mobileMenu");
 
+
+  /*
+  |--------------------------------------------------------------------------
+  | DEBUG ELEMENTS
+  |--------------------------------------------------------------------------
+  */
+
+  console.log("[SENN] index.js loaded");
+
+  console.log("[SENN] Elements:", {
+    chat: !!chat,
+    chatInner: !!chatInner,
+    welcome: !!welcome,
+    input: !!input,
+    sendButton: !!sendButton,
+    composer: !!composer,
+    newChat: !!newChat,
+    chatHistory: !!chatHistory,
+    statusText: !!statusText,
+    statusDot: !!statusDot,
+    sidebar: !!sidebar,
+    mobileMenu: !!mobileMenu
+  });
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | LOAD
+  |--------------------------------------------------------------------------
+  */
+
+  loadHistory();
+
+  bindEvents();
+
+  autoResize();
+
+  checkServer();
+
+  if (input) {
+    input.focus();
+  }
+
 }
 
 
-/* ==========================================================================
-   EVENTS
-========================================================================== */
+/*
+|--------------------------------------------------------------------------
+| DOM READY
+|--------------------------------------------------------------------------
+|
+| Aman kalau script dipasang:
+| - di <head>
+| - sebelum HTML
+| - sesudah HTML
+| - dengan defer
+|--------------------------------------------------------------------------
+*/
+
+if (
+  document.readyState === "loading"
+) {
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    init,
+    { once: true }
+  );
+
+} else {
+
+  init();
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| EVENTS
+|--------------------------------------------------------------------------
+*/
 
 function bindEvents() {
 
-  /* SEND */
+  /*
+  |--------------------------------------------------------------------------
+  | FORM SUBMIT
+  |--------------------------------------------------------------------------
+  */
 
-  composer?.addEventListener("submit", event => {
+  if (composer) {
 
-    event.preventDefault();
+    composer.addEventListener(
+      "submit",
+      function (event) {
 
-    sendMessage();
+        event.preventDefault();
 
-  });
-
-
-  /* ENTER */
-
-  input?.addEventListener("keydown", event => {
-
-    if (
-      event.key === "Enter" &&
-      !event.shiftKey
-    ) {
-
-      event.preventDefault();
-
-      sendMessage();
-
-    }
-
-  });
-
-
-  /* INPUT */
-
-  input?.addEventListener("input", () => {
-
-    autoResize();
-
-    updateSendButton();
-
-  });
-
-
-  /* NEW CHAT */
-
-  newChat?.addEventListener(
-    "click",
-    createNewChat
-  );
-
-
-  /* MOBILE MENU */
-
-  mobileMenu?.addEventListener("click", event => {
-
-    event.stopPropagation();
-
-    toggleSidebar();
-
-  });
-
-
-  /* SUGGESTIONS */
-
-  document
-    .querySelectorAll(".suggestion")
-    .forEach(button => {
-
-      button.addEventListener("click", () => {
-
-        const message =
-          button.dataset.message;
-
-        if (!message || !input) {
-          return;
-        }
-
-        input.value = message;
-
-        autoResize();
-
-        updateSendButton();
-
-        input.focus();
+        event.stopPropagation();
 
         sendMessage();
 
-      });
+      }
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | SEND BUTTON
+  |--------------------------------------------------------------------------
+  */
+
+  if (sendButton) {
+
+    sendButton.addEventListener(
+      "click",
+      function (event) {
+
+        event.preventDefault();
+
+        event.stopPropagation();
+
+        sendMessage();
+
+      }
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | ENTER
+  |--------------------------------------------------------------------------
+  */
+
+  if (input) {
+
+    input.addEventListener(
+      "keydown",
+      function (event) {
+
+        if (
+          event.key === "Enter" &&
+          !event.shiftKey
+        ) {
+
+          event.preventDefault();
+
+          sendMessage();
+
+        }
+
+      }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AUTO RESIZE
+    |--------------------------------------------------------------------------
+    */
+
+    input.addEventListener(
+      "input",
+      autoResize
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | NEW CHAT
+  |--------------------------------------------------------------------------
+  */
+
+  if (newChat) {
+
+    newChat.addEventListener(
+      "click",
+      function () {
+
+        createNewChat();
+
+      }
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | MOBILE MENU
+  |--------------------------------------------------------------------------
+  */
+
+  if (mobileMenu) {
+
+    mobileMenu.addEventListener(
+      "click",
+      function (event) {
+
+        event.preventDefault();
+
+        event.stopPropagation();
+
+        if (sidebar) {
+
+          sidebar.classList.toggle(
+            "open"
+          );
+
+        }
+
+      }
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | SUGGESTIONS
+  |--------------------------------------------------------------------------
+  */
+
+  document
+    .querySelectorAll(".suggestion")
+    .forEach(function (button) {
+
+      button.addEventListener(
+        "click",
+        function () {
+
+          const message =
+            button.dataset.message;
+
+          if (!message || !input) {
+            return;
+          }
+
+          input.value =
+            message;
+
+          autoResize();
+
+          sendMessage();
+
+        }
+      );
 
     });
 
 
-  /* CLOSE SIDEBAR */
+  /*
+  |--------------------------------------------------------------------------
+  | CLOSE SIDEBAR
+  |--------------------------------------------------------------------------
+  */
 
-  chat?.addEventListener("click", () => {
+  if (chat) {
 
-    if (window.innerWidth <= 760) {
+    chat.addEventListener(
+      "click",
+      function () {
 
-      closeSidebar();
+        if (
+          window.innerWidth <= 760 &&
+          sidebar
+        ) {
+
+          sidebar.classList.remove(
+            "open"
+          );
+
+        }
+
+      }
+    );
+
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | ESC
+  |--------------------------------------------------------------------------
+  */
+
+  document.addEventListener(
+    "keydown",
+    function (event) {
+
+      if (
+        event.key === "Escape" &&
+        sidebar
+      ) {
+
+        sidebar.classList.remove(
+          "open"
+        );
+
+      }
 
     }
-
-  });
-
-
-  /* ESC */
-
-  document.addEventListener("keydown", event => {
-
-    if (event.key === "Escape") {
-
-      closeSidebar();
-
-    }
-
-  });
-
-
-  /* CLICK OUTSIDE SIDEBAR */
-
-  document.addEventListener("click", event => {
-
-    if (window.innerWidth > 760) {
-      return;
-    }
-
-    if (!sidebar?.classList.contains("open")) {
-      return;
-    }
-
-    if (
-      sidebar.contains(event.target) ||
-      mobileMenu?.contains(event.target)
-    ) {
-      return;
-    }
-
-    closeSidebar();
-
-  });
+  );
 
 }
 
 
-/* ==========================================================================
-   SIDEBAR
-========================================================================== */
-
-function toggleSidebar() {
-
-  sidebar?.classList.toggle("open");
-
-}
-
-function closeSidebar() {
-
-  sidebar?.classList.remove("open");
-
-}
-
-
-/* ==========================================================================
-   SEND MESSAGE
-========================================================================== */
+/*
+|--------------------------------------------------------------------------
+| SEND MESSAGE
+|--------------------------------------------------------------------------
+*/
 
 async function sendMessage() {
+
+  /*
+  |--------------------------------------------------------------------------
+  | SAFETY
+  |--------------------------------------------------------------------------
+  */
 
   if (state.sending) {
     return;
   }
 
   if (!input) {
+    console.error(
+      "[SENN] #messageInput tidak ditemukan."
+    );
     return;
   }
 
+
   const message =
     input.value.trim();
+
 
   if (!message) {
 
@@ -309,6 +460,12 @@ async function sendMessage() {
   }
 
 
+  /*
+  |--------------------------------------------------------------------------
+  | CHAT ID
+  |--------------------------------------------------------------------------
+  */
+
   if (!state.currentChatId) {
 
     state.currentChatId =
@@ -317,6 +474,12 @@ async function sendMessage() {
   }
 
 
+  /*
+  |--------------------------------------------------------------------------
+  | STATE
+  |--------------------------------------------------------------------------
+  */
+
   state.sending = true;
 
   setSendingState(true);
@@ -324,7 +487,11 @@ async function sendMessage() {
   hideWelcome();
 
 
-  /* USER MESSAGE */
+  /*
+  |--------------------------------------------------------------------------
+  | USER MESSAGE
+  |--------------------------------------------------------------------------
+  */
 
   addMessage(
     "user",
@@ -332,7 +499,11 @@ async function sendMessage() {
   );
 
 
-  /* CONVERSATION */
+  /*
+  |--------------------------------------------------------------------------
+  | CONTEXT
+  |--------------------------------------------------------------------------
+  */
 
   state.conversation.push({
 
@@ -343,22 +514,40 @@ async function sendMessage() {
   });
 
 
-  /* CLEAR INPUT */
+  /*
+  |--------------------------------------------------------------------------
+  | CLEAR INPUT
+  |--------------------------------------------------------------------------
+  */
 
   input.value = "";
 
   autoResize();
 
-  updateSendButton();
 
-
-  /* TYPING */
+  /*
+  |--------------------------------------------------------------------------
+  | TYPING
+  |--------------------------------------------------------------------------
+  */
 
   const typing =
     addTyping();
 
 
   try {
+
+    console.log(
+      "[SENN] Sending:",
+      message
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | REQUEST
+    |--------------------------------------------------------------------------
+    */
 
     const response =
       await fetch(
@@ -369,13 +558,17 @@ async function sendMessage() {
 
           headers: {
             "Content-Type":
+              "application/json",
+
+            "Accept":
               "application/json"
           },
 
           body:
             JSON.stringify({
 
-              message,
+              message:
+                message,
 
               conversation:
                 state.conversation
@@ -386,18 +579,33 @@ async function sendMessage() {
       );
 
 
+    console.log(
+      "[SENN] Response:",
+      response.status
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ERROR HTTP
+    |--------------------------------------------------------------------------
+    */
+
     if (!response.ok) {
 
       let errorMessage =
         `Server error (${response.status})`;
+
 
       try {
 
         const errorData =
           await response.json();
 
+
         if (
-          errorData?.error
+          errorData &&
+          errorData.error
         ) {
 
           errorMessage =
@@ -407,9 +615,12 @@ async function sendMessage() {
 
       } catch {
 
-        /* response bukan JSON */
+        /*
+        | Response bukan JSON.
+        */
 
       }
+
 
       throw new Error(
         errorMessage
@@ -418,15 +629,37 @@ async function sendMessage() {
     }
 
 
+    /*
+    |--------------------------------------------------------------------------
+    | JSON
+    |--------------------------------------------------------------------------
+    */
+
     const data =
       await response.json();
 
 
-    removeTyping(typing);
+    console.log(
+      "[SENN] Data:",
+      data
+    );
 
+
+    removeTyping(
+      typing
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ANSWER
+    |--------------------------------------------------------------------------
+    */
 
     const answer =
-      extractAnswer(data);
+      extractAnswer(
+        data
+      );
 
 
     addMessage(
@@ -435,6 +668,12 @@ async function sendMessage() {
       data
     );
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | SAVE CONTEXT
+    |--------------------------------------------------------------------------
+    */
 
     state.conversation.push({
 
@@ -445,7 +684,15 @@ async function sendMessage() {
     });
 
 
-    saveCurrentChat(message);
+    /*
+    |--------------------------------------------------------------------------
+    | HISTORY
+    |--------------------------------------------------------------------------
+    */
+
+    saveCurrentChat(
+      message
+    );
 
 
   } catch (error) {
@@ -456,14 +703,25 @@ async function sendMessage() {
     );
 
 
-    removeTyping(typing);
+    removeTyping(
+      typing
+    );
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | ERROR MESSAGE
+    |--------------------------------------------------------------------------
+    */
 
     addMessage(
       "assistant",
-      `Maaf, Senn mengalami kendala.
-
-${error?.message || "Server tidak dapat dihubungi."}`
+      [
+        "Senn gagal memproses pesan.",
+        "",
+        error?.message ||
+          "Server tidak dapat dihubungi."
+      ].join("\n")
     );
 
 
@@ -473,18 +731,20 @@ ${error?.message || "Server tidak dapat dihubungi."}`
 
     setSendingState(false);
 
-    updateSendButton();
-
-    input.focus();
+    if (input) {
+      input.focus();
+    }
 
   }
 
 }
 
 
-/* ==========================================================================
-   EXTRACT ANSWER
-========================================================================== */
+/*
+|--------------------------------------------------------------------------
+| EXTRACT ANSWER
+|--------------------------------------------------------------------------
+*/
 
 function extractAnswer(data) {
 
@@ -496,6 +756,7 @@ function extractAnswer(data) {
 
   }
 
+
   if (
     typeof data?.text === "string"
   ) {
@@ -503,6 +764,7 @@ function extractAnswer(data) {
     return data.text;
 
   }
+
 
   if (
     typeof data?.message === "string"
@@ -512,6 +774,7 @@ function extractAnswer(data) {
 
   }
 
+
   if (
     typeof data?.result?.text === "string"
   ) {
@@ -519,6 +782,7 @@ function extractAnswer(data) {
     return data.result.text;
 
   }
+
 
   if (
     typeof data?.data?.text === "string"
@@ -528,14 +792,17 @@ function extractAnswer(data) {
 
   }
 
+
   return "Senn tidak menerima jawaban dari server.";
 
 }
 
 
-/* ==========================================================================
-   ADD MESSAGE
-========================================================================== */
+/*
+|--------------------------------------------------------------------------
+| ADD MESSAGE
+|--------------------------------------------------------------------------
+*/
 
 function addMessage(
   role,
@@ -552,8 +819,14 @@ function addMessage(
     document.createElement("div");
 
   message.className =
-    `message ${role}`;
+    "message " + role;
 
+
+  /*
+  |--------------------------------------------------------------------------
+  | AVATAR
+  |--------------------------------------------------------------------------
+  */
 
   const avatar =
     document.createElement("div");
@@ -567,12 +840,24 @@ function addMessage(
       : "S";
 
 
+  /*
+  |--------------------------------------------------------------------------
+  | CONTENT
+  |--------------------------------------------------------------------------
+  */
+
   const contentWrapper =
     document.createElement("div");
 
   contentWrapper.className =
     "message-content";
 
+
+  /*
+  |--------------------------------------------------------------------------
+  | BUBBLE
+  |--------------------------------------------------------------------------
+  */
 
   const bubble =
     document.createElement("div");
@@ -581,13 +866,20 @@ function addMessage(
     "bubble";
 
   bubble.innerHTML =
-    formatMessage(content);
+    formatMessage(
+      content
+    );
 
+
+  /*
+  |--------------------------------------------------------------------------
+  | BUILD
+  |--------------------------------------------------------------------------
+  */
 
   contentWrapper.appendChild(
     bubble
   );
-
 
   message.appendChild(
     avatar
@@ -597,11 +889,16 @@ function addMessage(
     contentWrapper
   );
 
-
   chatInner.appendChild(
     message
   );
 
+
+  /*
+  |--------------------------------------------------------------------------
+  | SOURCES
+  |--------------------------------------------------------------------------
+  */
 
   if (
     role === "assistant" &&
@@ -609,9 +906,14 @@ function addMessage(
   ) {
 
     const sources =
-      getSources(metadata);
+      getSources(
+        metadata
+      );
 
-    if (sources.length) {
+
+    if (
+      sources.length
+    ) {
 
       appendSources(
         contentWrapper,
@@ -630,9 +932,11 @@ function addMessage(
 }
 
 
-/* ==========================================================================
-   FORMAT MESSAGE
-========================================================================== */
+/*
+|--------------------------------------------------------------------------
+| FORMAT MESSAGE
+|--------------------------------------------------------------------------
+*/
 
 function formatMessage(text) {
 
@@ -646,26 +950,36 @@ function formatMessage(text) {
 
 
   let result =
-    escapeHTML(text);
+    escapeHTML(
+      text
+    );
 
 
   /*
-  CODE BLOCK
+  |--------------------------------------------------------------------------
+  | CODE BLOCK
+  |--------------------------------------------------------------------------
   */
 
   result =
     result.replace(
       /```(?:[\w-]+)?\n?([\s\S]*?)```/g,
-      (_, code) => {
+      function (_, code) {
 
-        return `<pre><code>${code}</code></pre>`;
+        return (
+          "<pre><code>" +
+          code +
+          "</code></pre>"
+        );
 
       }
     );
 
 
   /*
-  INLINE CODE
+  |--------------------------------------------------------------------------
+  | INLINE CODE
+  |--------------------------------------------------------------------------
   */
 
   result =
@@ -676,7 +990,9 @@ function formatMessage(text) {
 
 
   /*
-  BOLD
+  |--------------------------------------------------------------------------
+  | BOLD
+  |--------------------------------------------------------------------------
   */
 
   result =
@@ -687,7 +1003,9 @@ function formatMessage(text) {
 
 
   /*
-  ITALIC
+  |--------------------------------------------------------------------------
+  | ITALIC
+  |--------------------------------------------------------------------------
   */
 
   result =
@@ -698,7 +1016,9 @@ function formatMessage(text) {
 
 
   /*
-  HEADINGS
+  |--------------------------------------------------------------------------
+  | HEADINGS
+  |--------------------------------------------------------------------------
   */
 
   result =
@@ -721,7 +1041,9 @@ function formatMessage(text) {
 
 
   /*
-  LINKS
+  |--------------------------------------------------------------------------
+  | LINKS
+  |--------------------------------------------------------------------------
   */
 
   result =
@@ -732,7 +1054,9 @@ function formatMessage(text) {
 
 
   /*
-  NEWLINES
+  |--------------------------------------------------------------------------
+  | NEWLINES
+  |--------------------------------------------------------------------------
   */
 
   result =
@@ -740,6 +1064,145 @@ function formatMessage(text) {
       /\n/g,
       "<br>"
     );
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | RESTORE CODE BLOCK
+  |--------------------------------------------------------------------------
+  */
+
+  result =
+    result.replace(
+      /<pre><code>([\s\S]*?)<\/code><\/pre>/g,
+      function (_, code) {
+
+        return (
+          "<pre><code>" +
+          code.replace(
+            /<br>/g,
+            "\n"
+          ) +
+          "</code></pre>"
+        );
+
+      }
+    );
+
+
+  return result;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ESCAPE HTML
+|--------------------------------------------------------------------------
+*/
+
+function escapeHTML(text) {
+
+  const div =
+    document.createElement("div");
+
+  div.textContent =
+    text;
+
+  return div.innerHTML;
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| TYPING
+|--------------------------------------------------------------------------
+*/
+
+function addTyping() {
+
+  if (!chatInner) {
+    return null;
+  }
+
+
+  const message =
+    document.createElement("div");
+
+  message.className =
+    "message assistant";
+
+
+  const avatar =
+    document.createElement("div");
+
+  avatar.className =
+    "avatar";
+
+  avatar.textContent =
+    "S";
+
+
+  const content =
+    document.createElement("div");
+
+  content.className =
+    "message-content";
+
+
+  const bubble =
+    document.createElement("div");
+
+  bubble.className =
+    "bubble";
+
+
+  const typing =
+    document.createElement("div");
+
+  typing.className =
+    "typing";
+
+
+  for (
+    let i = 0;
+    i < 3;
+    i++
+  ) {
+
+    const dot =
+      document.createElement("span");
+
+    typing.appendChild(
+      dot
+    );
+
+  }
+
+
+  bubble.appendChild(
+    typing
+  );
+
+  content.appendChild(
+    bubble
+  );
+
+  message.appendChild(
+    avatar
+  );
+
+  message.appendChild(
+    content
+  );
+
+  chatInner.appendChild(
+    message
+  );
+
+
+  
 
 
   /*
