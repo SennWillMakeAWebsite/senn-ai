@@ -5,42 +5,64 @@
 |--------------------------------------------------------------------------
 */
 
+"use strict";
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
-
-/*
-|--------------------------------------------------------------------------
-| APP
-|--------------------------------------------------------------------------
-*/
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
-const PORT =
-  Number(process.env.PORT) || 3000;
+const PORT = process.env.PORT || 3000;
 
-const AI_API_URL =
-  "https://api.openai.com/v1/responses";
+const AI_API_URL = "https://api.openai.com/v1/responses";
 
 const AI_MODEL =
-  process.env.AI_MODEL ||
-  "gpt-5.6-luna";
+  process.env.AI_MODEL || "gpt-5.6-luna";
 
 
 /*
 |--------------------------------------------------------------------------
-| SENN CONFIG
+| CONFIG
 |--------------------------------------------------------------------------
 */
 
-const SENN = {
-  name: "Senn AI",
-  version: "2.0.0"
-};
+const SYSTEM_PROMPT = `
+You are Senn AI V2.
+
+You are a modern general-purpose AI assistant.
+
+Understand Indonesian naturally, including:
+- slang
+- abbreviations
+- typos
+- Indonesian-English mixtures
+- short messages
+- casual conversation
+
+The user may say:
+"yg", "gak", "ga", "udh", "bgt", "gmn",
+"lanjut", "next", "oke", "iya", "trs", etc.
+
+Understand the intended meaning from context.
+
+Be natural, direct and useful.
+
+Do not unnecessarily repeat the user's question.
+
+If conversation history is provided, use it to maintain context.
+
+If external tool information is provided, use it accurately.
+
+Never invent web results or sources.
+`;
 
 
 /*
@@ -50,9 +72,12 @@ const SENN = {
 */
 
 app.use(
-  cors()
+  cors({
+    origin: true,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  })
 );
-
 
 app.use(
   express.json({
@@ -60,377 +85,126 @@ app.use(
   })
 );
 
-
-/*
-|--------------------------------------------------------------------------
-| STATIC FILES
-|--------------------------------------------------------------------------
-|
-| index.html
-| index.js
-| style/css
-| dan file frontend lainnya
-| akan dilayani dari folder project.
-|--------------------------------------------------------------------------
-*/
-
 app.use(
-  express.static(".")
+  express.urlencoded({
+    extended: true
+  })
 );
 
 
 /*
 |--------------------------------------------------------------------------
-| SYSTEM PROMPT
+| STATIC FRONTEND
 |--------------------------------------------------------------------------
 */
 
-const SYSTEM_PROMPT = `
-You are Senn AI 2.0.
-
-You are a modern general-purpose AI assistant.
-
-Understand Indonesian naturally.
-
-The user may use:
-- Indonesian slang
-- abbreviations
-- typos
-- Indonesian-English mixtures
-- very short messages
-- casual language
-
-Examples:
-
-gw
-gua
-lu
-lo
-yg
-udh
-udah
-blm
-bgt
-gmn
-knp
-trs
-aja
-ga
-gak
-nggak
-lanjut
-next
-oke
-y
-
-Understand these using conversation context.
-
-Do not force formal Indonesian.
-
-Be natural, direct, useful, and concise.
-
-If the user asks for coding help:
-- provide practical code
-- explain important parts briefly
-- preserve their existing project context
-
-If the user says:
-"lanjut"
-"next"
-"terus"
-"itu"
-"yang tadi"
-"gimana"
-"bikin"
-
-use previous conversation context.
-
-Never pretend to have performed an action that you did not perform.
-
-Never invent web sources.
-
-If web search is available and useful, use it.
-
-Answer in Indonesian unless the user clearly uses another language.
-`;
+app.use(
+  express.static(__dirname)
+);
 
 
 /*
 |--------------------------------------------------------------------------
-| API KEY CHECK
+| HEALTH
 |--------------------------------------------------------------------------
 */
 
-function requireApiKey() {
+app.get("/", (req, res) => {
 
-  if (
-    !process.env.AI_API_KEY
-  ) {
+  res.json({
+    success: true,
+    name: "Senn AI",
+    version: "2.0.0",
+    status: "online",
+    server: true,
+    ai: Boolean(process.env.AI_API_KEY),
+    model: AI_MODEL,
+    timestamp: new Date().toISOString()
+  });
 
-    throw new Error(
-      "AI_API_KEY belum dikonfigurasi di file .env"
-    );
+});
 
+
+/*
+|--------------------------------------------------------------------------
+| STATUS
+|--------------------------------------------------------------------------
+*/
+
+app.get("/api/status", (req, res) => {
+
+  res.json({
+
+    success: true,
+
+    status: "online",
+
+    system: {
+
+      server: true,
+
+      ai: Boolean(
+        process.env.AI_API_KEY
+      ),
+
+      chat: true,
+
+      context: true,
+
+      cors: true
+
+    },
+
+    version: "2.0.0",
+
+    model: AI_MODEL,
+
+    timestamp:
+      new Date().toISOString()
+
+  });
+
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| HELPERS
+|--------------------------------------------------------------------------
+*/
+
+function cleanConversation(conversation) {
+
+  if (!Array.isArray(conversation)) {
+    return [];
   }
 
-}
+  return conversation
+    .filter(item => {
 
-
-/*
-|--------------------------------------------------------------------------
-| BUILD CONVERSATION
-|--------------------------------------------------------------------------
-*/
-
-function buildConversation(
-  conversation,
-  message
-) {
-
-  const safeConversation =
-    Array.isArray(conversation)
-      ? conversation
-      : [];
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | Limit context
-  |--------------------------------------------------------------------------
-  */
-
-  const recent =
-    safeConversation
-      .filter(
-        item =>
-          item &&
-          (
-            item.role === "user" ||
-            item.role === "assistant"
-          )
-      )
-      .slice(-30)
-      .map(
-        item => ({
-
-          role:
-            item.role,
-
-          content:
-            typeof item.content === "string"
-              ? item.content
-              : String(
-                  item.content ?? ""
-                )
-
-        })
+      return (
+        item &&
+        typeof item === "object" &&
+        ["user", "assistant", "system"].includes(
+          item.role
+        ) &&
+        typeof item.content === "string"
       );
 
+    })
+    .slice(-30)
+    .map(item => ({
 
-  /*
-  |--------------------------------------------------------------------------
-  | Jangan duplicate message terakhir
-  |--------------------------------------------------------------------------
-  */
+      role: item.role,
 
-  const last =
-    recent[recent.length - 1];
+      content: item.content
 
-
-  if (
-    !last ||
-    last.role !== "user" ||
-    last.content !== message
-  ) {
-
-    recent.push({
-
-      role: "user",
-
-      content: message
-
-    });
-
-  }
-
-
-  return recent;
+    }));
 
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| OPENAI REQUEST
-|--------------------------------------------------------------------------
-*/
-
-async function askAI({
-  message,
-  conversation
-}) {
-
-  requireApiKey();
-
-
-  const input =
-    buildConversation(
-      conversation,
-      message
-    );
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | RESPONSE API
-  |--------------------------------------------------------------------------
-  */
-
-  const response =
-    await fetch(
-      AI_API_URL,
-      {
-
-        method: "POST",
-
-        headers: {
-
-          "Content-Type":
-            "application/json",
-
-          Authorization:
-            `Bearer ${process.env.AI_API_KEY}`
-
-        },
-
-        body:
-          JSON.stringify({
-
-            model:
-              AI_MODEL,
-
-            instructions:
-              SYSTEM_PROMPT,
-
-            input,
-
-            store:
-              false
-
-          })
-
-      }
-    );
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | READ RESPONSE
-  |--------------------------------------------------------------------------
-  */
-
-  const raw =
-    await response.text();
-
-
-  let data = {};
-
-  try {
-
-    data =
-      raw
-        ? JSON.parse(raw)
-        : {};
-
-  } catch {
-
-    throw new Error(
-      "OpenAI mengirim response yang bukan JSON."
-    );
-
-  }
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | API ERROR
-  |--------------------------------------------------------------------------
-  */
-
-  if (!response.ok) {
-
-    console.error(
-      "[OPENAI ERROR]",
-      data
-    );
-
-
-    const apiMessage =
-      data?.error?.message ||
-      data?.message ||
-      `OpenAI API error ${response.status}`;
-
-
-    throw new Error(
-      apiMessage
-    );
-
-  }
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | TEXT
-  |--------------------------------------------------------------------------
-  */
-
-  const text =
-    extractOutputText(
-      data
-    );
-
-
-  if (!text) {
-
-    throw new Error(
-      "AI berhasil dipanggil tetapi tidak mengembalikan teks."
-    );
-
-  }
-
-
-  return {
-
-    text,
-
-    responseId:
-      data.id ||
-      null,
-
-    model:
-      data.model ||
-      AI_MODEL
-
-  };
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| EXTRACT OUTPUT TEXT
-|--------------------------------------------------------------------------
-*/
-
-function extractOutputText(
-  data
-) {
-
-  /*
-  |--------------------------------------------------------------------------
-  | Responses API biasanya menyediakan output_text
-  |--------------------------------------------------------------------------
-  */
+function extractText(data) {
 
   if (
     typeof data?.output_text === "string" &&
@@ -442,120 +216,88 @@ function extractOutputText(
   }
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | Fallback parser
-  |--------------------------------------------------------------------------
-  */
+  if (Array.isArray(data?.output)) {
 
-  const output =
-    Array.isArray(data?.output)
-      ? data.output
-      : [];
+    const parts = [];
 
+    for (const item of data.output) {
 
-  const parts = [];
+      if (!Array.isArray(item?.content)) {
+        continue;
+      }
 
+      for (const content of item.content) {
 
-  for (
-    const item of output
-  ) {
+        if (
+          typeof content?.text === "string"
+        ) {
 
-    if (
-      !Array.isArray(
-        item?.content
-      )
-    ) {
+          parts.push(
+            content.text
+          );
 
-      continue;
+        }
+
+      }
 
     }
 
+    if (parts.length) {
 
-    for (
-      const content
-      of item.content
-    ) {
-
-      if (
-        typeof content?.text === "string"
-      ) {
-
-        parts.push(
-          content.text
-        );
-
-      }
+      return parts.join("\n").trim();
 
     }
 
   }
 
 
-  return parts
-    .join("\n")
-    .trim();
-
+  return "";
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| EXTRACT SOURCES
+| WEB SOURCES
 |--------------------------------------------------------------------------
 */
 
-function extractSources(
-  data
-) {
+function extractSources(data) {
 
   const sources = [];
 
+  if (!Array.isArray(data?.output)) {
+    return sources;
+  }
 
-  const output =
-    Array.isArray(data?.output)
-      ? data.output
-      : [];
+  for (const item of data.output) {
 
-
-  for (
-    const item
-    of output
-  ) {
-
-    if (
-      !Array.isArray(
-        item?.content
-      )
-    ) {
-
+    if (!Array.isArray(item?.content)) {
       continue;
-
     }
 
+    for (const content of item.content) {
 
-    for (
-      const content
-      of item.content
-    ) {
-
-      const annotations =
-        Array.isArray(
+      if (
+        !Array.isArray(
           content?.annotations
         )
-          ? content.annotations
-          : [];
-
+      ) {
+        continue;
+      }
 
       for (
         const annotation
-        of annotations
+        of content.annotations
       ) {
 
         if (
           annotation?.type ===
           "url_citation"
         ) {
+
+          if (!annotation.url) {
+            continue;
+          }
 
           sources.push({
 
@@ -576,28 +318,12 @@ function extractSources(
 
   }
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | Remove duplicates
-  |--------------------------------------------------------------------------
-  */
-
   return [
     ...new Map(
-
-      sources
-        .filter(
-          source =>
-            source.url
-        )
-        .map(
-          source => [
-            source.url,
-            source
-          ]
-        )
-
+      sources.map(source => [
+        source.url,
+        source
+      ])
     ).values()
   ];
 
@@ -606,47 +332,409 @@ function extractSources(
 
 /*
 |--------------------------------------------------------------------------
-| HOME
+| AI REQUEST
+|--------------------------------------------------------------------------
+*/
+
+async function askAI({
+  message,
+  conversation = []
+}) {
+
+  if (!process.env.AI_API_KEY) {
+
+    throw new Error(
+      "AI_API_KEY belum tersedia di environment server."
+    );
+
+  }
+
+
+  const cleanHistory =
+    cleanConversation(
+      conversation
+    );
+
+
+  const input = [
+    ...cleanHistory,
+
+    {
+      role: "user",
+      content: message
+    }
+
+  ];
+
+
+  const body = {
+
+    model: AI_MODEL,
+
+    instructions:
+      SYSTEM_PROMPT,
+
+    input,
+
+    store: false
+
+  };
+
+
+  const response =
+    await fetch(
+      AI_API_URL,
+      {
+
+        method: "POST",
+
+        headers: {
+
+          "Content-Type":
+            "application/json",
+
+          "Authorization":
+            `Bearer ${process.env.AI_API_KEY}`
+
+        },
+
+        body:
+          JSON.stringify(body)
+
+      }
+    );
+
+
+  const rawText =
+    await response.text();
+
+
+  let data;
+
+  try {
+
+    data =
+      JSON.parse(
+        rawText
+      );
+
+  } catch {
+
+    throw new Error(
+      `API AI mengembalikan response tidak valid: ${rawText.slice(0, 500)}`
+    );
+
+  }
+
+
+  if (!response.ok) {
+
+    const apiError =
+      data?.error?.message ||
+      data?.message ||
+      `HTTP ${response.status}`;
+
+    throw new Error(
+      `AI API Error: ${apiError}`
+    );
+
+  }
+
+
+  const answer =
+    extractText(data);
+
+
+  if (!answer) {
+
+    throw new Error(
+      "AI API berhasil dipanggil tetapi tidak mengembalikan teks jawaban."
+    );
+
+  }
+
+
+  return {
+
+    answer,
+
+    sources:
+      extractSources(data),
+
+    responseId:
+      data?.id || null,
+
+    model:
+      data?.model || AI_MODEL
+
+  };
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| CHAT API
+|--------------------------------------------------------------------------
+*/
+
+app.post(
+  "/api/chat",
+  async (req, res) => {
+
+    try {
+
+      const message =
+        typeof req.body?.message === "string"
+          ? req.body.message.trim()
+          : "";
+
+
+      const conversation =
+        Array.isArray(
+          req.body?.conversation
+        )
+          ? req.body.conversation
+          : [];
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | VALIDATION
+      |--------------------------------------------------------------------------
+      */
+
+      if (!message) {
+
+        return res.status(400).json({
+
+          success: false,
+
+          error:
+            "Message tidak boleh kosong."
+
+        });
+
+      }
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | AI
+      |--------------------------------------------------------------------------
+      */
+
+      const result =
+        await askAI({
+
+          message,
+
+          conversation
+
+        });
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | RESPONSE
+      |--------------------------------------------------------------------------
+      */
+
+      return res.status(200).json({
+
+        success: true,
+
+        answer:
+          result.answer,
+
+        text:
+          result.answer,
+
+        message:
+          result.answer,
+
+        sources:
+          result.sources,
+
+        model:
+          result.model,
+
+        responseId:
+          result.responseId
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "\n[SENN AI ERROR]\n",
+        error
+      );
+
+
+      return res.status(500).json({
+
+        success: false,
+
+        error:
+          error?.message ||
+          "Senn AI mengalami kesalahan server."
+
+      });
+
+    }
+
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| TEST CHAT ENDPOINT
 |--------------------------------------------------------------------------
 */
 
 app.get(
-  "/",
-  function (req, res) {
+  "/api/chat",
+  (req, res) => {
 
     res.json({
 
-      success:
-        true,
+      success: true,
 
-      name:
-        SENN.name,
+      message:
+        "Senn AI chat endpoint aktif.",
 
-      version:
-        SENN.version,
+      method:
+        "POST",
 
-      status:
-        "online",
+      endpoint:
+        "/api/chat"
 
-      ai:
-        Boolean(
-          process.env.AI_API_KEY
-        ),
+    });
 
-      model:
-        AI_MODEL,
+  }
+);
 
-      endpoints: {
 
-        chat:
-          "/api/chat",
+/*
+|--------------------------------------------------------------------------
+| 404 API
+|--------------------------------------------------------------------------
+*/
 
-        status:
-          "/api/status"
+app.use(
+  "/api",
+  (req, res) => {
 
-      },
+    res.status(404).json({
 
-      timestamp:
+      success: false,
+
+      error:
+        "API endpoint tidak ditemukan.",
+
+      path:
+        req.path
+
+    });
+
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| FRONTEND FALLBACK
+|--------------------------------------------------------------------------
+*/
+
+app.get(
+  "*",
+  (req, res) => {
+
+    res.sendFile(
+      path.join(
+        __dirname,
+        "index.html"
+      )
+    );
+
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| ERROR HANDLER
+|--------------------------------------------------------------------------
+*/
+
+app.use(
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
+
+    console.error(
+      "[SERVER ERROR]",
+      error
+    );
+
+
+    if (res.headersSent) {
+      return next(error);
+    }
+
+
+    res.status(500).json({
+
+      success: false,
+
+      error:
+        "Internal server error."
+
+    });
+
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| START SERVER
+|--------------------------------------------------------------------------
+*/
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+
+    console.log("");
+    console.log("=================================");
+    console.log("        SENN AI V2");
+    console.log("=================================");
+    console.log(
+      `Server : http://localhost:${PORT}`
+    );
+    console.log(
+      `Model  : ${AI_MODEL}`
+    );
+    console.log(
+      `AI Key : ${
+        process.env.AI_API_KEY
+          ? "CONNECTED"
+          : "MISSING"
+      }`
+    );
+    console.log("=================================");
+    console.log("");
+
+  }
+);      timestamp:
         new Date().toISOString()
 
     });
